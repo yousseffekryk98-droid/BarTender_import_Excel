@@ -1,60 +1,107 @@
 {
   "name": "excel-label-studio",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Offline, reusable Excel-to-text label template designer and Windows printer",
+  "description": "Free, offline Windows label designer and printer for Excel data (text labels first; barcodes optional)",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "node --test",
+    "dev": "vite",
+    "build": "npm run build:main && vite build",
+    "build:main": "esbuild src/engine/schema.js --bundle --format=cjs --platform=node --target=node20 --outfile=electron/generated/schema.cjs --log-level=warning",
+    "test": "node --test --test-concurrency=4 \"tests/unit/**/*.test.js\"",
+    "test:e2e": "npm run build && node --test --test-concurrency=1 \"tests/e2e/**/*.test.mjs\"",
     "desktop": "npm run build && electron .",
-    "desktop:dev": "concurrently -k \"npm:dev\" \"wait-on http://127.0.0.1:5173 && cross-env ELECTRON_START_URL=http://127.0.0.1:5173 electron .\"",
-    "dist:win": "npm run build && electron-builder --win --publish never"
+    "desktop:dev": "node scripts/dev.mjs",
+    "dist:win": "npm run build && electron-builder --win nsis portable --x64 --publish never",
+    "icons": "python build/make_icon.py",
+    "fixtures": "python tests/fixtures/make_xls.py"
   },
-  "dependencies": {
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "bwip-js": "^4.11.4",
+    "cfb": "^1.2.2",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.25.12",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.468.0",
     "papaparse": "^5.5.3",
+    "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2",
-    "cross-env": "^7.0.3",
-    "electron": "^33.3.1",
-    "electron-builder": "^25.1.8",
-    "vite": "^6.0.5",
-    "wait-on": "^8.0.1"
+    "react-dom": "^18.3.1",
+    "vite": "^6.0.5"
   },
   "build": {
     "appId": "com.excellabelstudio.app",
     "productName": "Excel Label Studio",
+    "copyright": "Copyright © 2026 Excel Label Studio contributors",
     "asar": true,
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "build/icon.png",
+      "package.json",
+      "!**/*.map"
     ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
     "win": {
       "target": [
-        "nsis",
-        "portable"
-      ]
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "executableName": "ExcelLabelStudio",
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Excel Label Studio",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Excel-Label-Studio-Setup-${version}.${ext}",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "uninstallDisplayName": "Excel Label Studio"
+    },
+    "portable": {
+      "artifactName": "Excel-Label-Studio-Portable-${version}.${ext}"
+    },
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": true
     }
   },
   "overrides": {
-    "exceljs": {
-      "uuid": "11.1.1"
-    }
-  }
+    "uuid": "^11.1.1"
+  },
+  "author": {
+    "name": "Excel Label Studio contributors"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/yousseffekryk98-droid/BarTender_import_Excel"
 }

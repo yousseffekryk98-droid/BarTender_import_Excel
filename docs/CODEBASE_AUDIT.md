@@ -1,74 +1,81 @@
-# Source inspection and production readiness audit
-Date: 2026-10-19. Repository: `yousseffekryk98-droid/BarTender_import_Excel`, branch `main`.
+# Codebase Audit — Excel Label Studio v0.2.0 (baseline)
 
-## Executive summary
-Small, offline-oriented React/Vite + Electron application, optimized for **Excel/CSV text-only labels**. This is not a BarTender replacement at Professional/Automation feature parity. Source implementations exist for importing  .xlsx, .csv and .tsv, multi-sheet selection, fixed/Excel text positions, editable template JSON in localStorage, 100-label print batches and Windows printer enumeration/printing. Real Windows printing, packaging, E2E UI behavior and full security audit have **not** passed verification.
+Audited commit: `5e8c00d` (main, "Remove unused React plugin dependency after Vite JSX migration").
+Audit date: 2026-10-19. Environment: Node 22.22, npm 10.9, Ubuntu 24.04 (+ Xvfb, Wine 9 for Windows packaging).
 
-## File-by-file inventory (reviewed)
-- `package.json` — Vite/Electron deps, two Windows build targets (NSIS/portable), no lockfile committed.
-- `vite.config.js` — relative base for packaged file:// renderer, native JSX transformation.
-- `index.html` — root document, CSP policy; script-src self after security hardening.
-- `electron/main.cjs` — sandboxed BrowserWindows, temporary HTML print job, printer IPC, Windows drivers.
-- `electron/preload.cjs` — minimal printer enumeration/print bridge.
-- `src/main.jsx` — React root.
-- `src/App.jsx` — main designer, import, mapping, template CRUD, form, preview, selection, print and menu actions; still monolithic and needs component decomposition.
-- `src/core.js` — row normalization, field guessing, quantities and bounded batching.
-- `src/core.test.js` — table, EAN helper (legacy), mappings, escaping, quantity/batch tests.
-- `src/templates.js` — header matching, safe template normalization, text and column binding.
-- `src/templates.test.js` — strict mapping, printable examples, markup escaping, bounds.
-- `src/text-print.js` — absolute positioned text renderer and print page HTML with mm dimensions.
-- `src/importers.js` — ExcelJS and Papa Parse, cached formula results, CSV reading.
-- `src/importers.test.js` — XLSX/CSV regression tests using programmatic workbooks.
-- `src/styles.css` — desktop shell and designer layout, editor controls, responsive styles.
-- `.github/workflows/windows.yml` — Linux verification and Windows packaging jobs.
-- `.gitignore`, `LICENSE`, `README.md`, `sample/products.csv` — project metadata, installation and sample.
+## 1. Inventory
 
-## Confirmed source problems found and corrected
-1. **Wrong column printed**: `resolveColumnIndex` could fall back to a guessed semantic column even though an explicit saved column header was missing. Fixed: explicit name always resolves exactly or reports missing; reordering still works.
-2. **Unexpected print copy**: `copyCount` treated zero, negative, missing, invalid quantity as one. Fixed: zero labels (unless quantity printing explicitly off).
-3. **Truncated columns**: `normalizeTable` used only the header row's width, hiding values in later columns. Fixed: considers first 200 data rows and creates placeholder headings.
-4. **Duplicate column headings**: now reports collisions for user correction; duplicate headings are NOT silently treated as the same field.
-5. **Missing designer controls**: added functional desktop menus, undo/redo, grid, zoom, record navigation, richer text options, object duplication, warning displays. All UI functionality awaits desktop smoke testing.
-6. **Over-permissive script CSP**: removed inline React Refresh JS path and set script-src self; package uses Vite native JSX. Requires production build verification.
+| Area | Files | Lines | Notes |
+|---|---|---:|---|
+| Electron main / preload | `electron/main.cjs`, `electron/preload.cjs` | 119 | One window, two IPC handlers (`label:get-printers`, `label:print`) |
+| React UI | `src/App.jsx`, `src/main.jsx`, `src/styles.css` | 956 | Single 731-line component holds all state and UI |
+| Engine | `src/core.js`, `src/templates.js`, `src/text-print.js` | 283 | Mix of legacy barcode-era helpers and text-template helpers |
+| Import | `src/importers.js` | 83 | ExcelJS (.xlsx) and PapaParse (.csv) |
+| Tests | `src/*.test.js` | 180 | 17 `node:test` unit tests, all passing |
+| CI | `.github/workflows/windows.yml` | 47 | Ubuntu test/build job + Windows `dist:win` job |
+| Packaging | `package.json#build` | — | NSIS + portable targets, no icon, no fuses |
+| Docs | `README.md` | 110 | Accurate for the text-only workflow |
 
-## Remaining critical risks
-- **Windows runner status:** GitHub Actions jobs execute successfully now. Run 39273573305 passed npm tests, Vite build, NSIS packaging, portable packaging and artifact upload. Physical installation/printer testing remains open.
-- **Real hardware not validated**: Electron `print` returns OS submission result, not physical print completion. Page size / fonts / driver stock must be tested on label printer hardware.
-- **npm audit**: user's Windows log displayed 20 vulnerabilities (6 moderate, 13 high, 1 critical) on the previous dependency tree. Full `npm audit --json` output is needed to attribute advisories; do not run `npm audit fix --force` blindly. After package edits rerun install, audit and classify direct/transitive impact.
-- **Workbook limits**: .xlsx and .csv only, 15 MB maximum, 40 columns and around 10,000 records per sheet; more advanced data handling absent. Excel numeric identifiers longer than 15 digits may already be rounded before import.
-- **Browser storage**: saved templates are localStorage-only, per Windows app origin and user profile, with no transactions or version history. Storage errors are not currently surfaced. Export JSON for backup.
-- **Data model**: one page/label template with text object array only; no layers, images, tables, group operations, printer-aware layout, print-job DB.
-- **Preview fidelity**: CSS mm sizing matches print-document units, but print drivers may scale or clip. Arabic glyph fallback and rotated-text bounding boxes require tests.
-- **Security testing**: Electron IPC and template import validation are partially guarded, but file:// HTML printing, dependency advisories, untrusted workbook memory use and cross-window navigation require dedicated threat modeling.
-- **Testing:** Real GitHub Actions runs have verified Node unit tests, Vite production build, and Windows EXE packaging. Remaining: Electron GUI workflows, native PDF output, installation and physical printer evidence.
+No TypeScript, no lockfile committed, no E2E tests, no `docs/` folder.
 
-## Immediate verification on user's Windows machine
-```powershell
-git pull origin main
-npm install
-npm test
-npm run build
-npm audit --omit=dev
-npm run desktop:dev
-npm run dist:win
-```
-On EXE failure inspect full PowerShell output; expected binaries under `release/` only after builder success. Test a single 50×30 mm label before production runs. Keep import samples synthetic; never upload private spreadsheets in bug reports without redaction.
+## 2. Build, test and runtime results (baseline)
 
+| Check | Result |
+|---|---|
+| `npm install` | OK (no lockfile → non-reproducible dependency tree) |
+| `npm test` | **17/17 pass** |
+| `npm run build` | OK; one 1.16 MB JS chunk (ExcelJS bundled eagerly) |
+| Electron launch (Xvfb) | Starts, no console errors |
+| `npm audit` | **20 vulnerabilities: 1 critical, 13 high, 6 moderate** |
 
-## Follow-up implementation (same audit session)
-- Added native Windows PDF export using Electron's `webContents.printToPDF` and Save dialog; uses label page dimensions in inches and `preferCSSPageSize` to align with mm stylesheet. This is **source-implemented and NOT runtime-verified**.
-- Added user-selectable sorting to Excel table; print records follow the same chosen ordering.
-- Added built-in shelf, serial-number and address text templates with safe save-as behavior.
-- Added functional desktop menu and keyboard shortcuts, more text formatting and a visible grid overlay.
-- Added TSV import, with blank line preservation for source-row numbering.
-- Removed unused React refresh plugin, switching to native Vite JSX transform for `script-src 'self'`.
-- Offline test harness: 17 isolated tests from `src/core.test.js` and `src/templates.test.js` passed by evaluating dependency-free source. This is **not** a substitute for `npm test` on Node with project dependencies, React build, Electron E2E or a real printer.
+### npm audit detail
 
-## v0.4 follow-up: persistence and canvas controls
-- Historical template arrays still load under the original localStorage key. New writes are versioned; last valid contents are backed up before changing the primary.
-- Damaged template JSON triggers recovery from the backup copy, or a storage-blocking error if both versions are unreadable. Template CRUD only updates UI state after a successful synchronous storage write.
-- Full user-template backup/merge JSON workflow, with duplicate-safe imported IDs and 50-template limit. File-backed persistence remains future work.
-- Pure `editor-geometry` helpers bound movement/resizing to label millimeters and optional 5 mm snapping.
-- The label editor displays a selection rectangle and resize grip. These editor controls do not appear in the print HTML.
-- Printing now refuses sheets with duplicate column headings, avoiding accidental ambiguous field selection.
-- Follow-up GitHub Actions verified installation, tests and frontend build. The production dependency report is captured as an artifact; physical hardware and UI E2E validation are not yet proven.
+| Package (via) | Severity | Root cause | Fix |
+|---|---|---|---|
+| `tar` (electron-builder → @electron/rebuild, node-gyp) | critical | Hardlink path traversal | electron-builder 26.x |
+| `electron` 33.4 | high | ASAR integrity bypass; EOL major | Electron 44.x |
+| `extract-zip`, `@electron/get`, `global-agent`, `roarr`, `sprintf-js` | high/moderate | Electron download tooling | Electron 44.x |
+| `app-builder-lib`, `builder-util(-runtime)`, `dmg-builder`, `electron-publish`… | high | electron-builder 25 | electron-builder 26.x |
+| `uuid` < 11.1.1 (via exceljs) | moderate | Buffer bounds check in v3/v5/v6 when `buf` given (ExcelJS only calls `v4()` without a buffer — not reachable) | npm `overrides` → uuid 11 |
+
+All findings are build-time or Electron-runtime; none come from first-party code.
+
+## 3. Defects found
+
+Severity: **C** critical (wrong output / data loss), **H** high, **M** medium, **L** low.
+
+| # | Sev | Where | Defect |
+|---|---|---|---|
+| D1 | **C** | `text-print.js` `renderTextLabel` | `font-family:` is written with `JSON.stringify` → `"Arial"` inside a double-quoted `style="…"` attribute. The attribute ends at that quote, so **bold, italic, underline, wrapping, rotation and text alignment are silently dropped** in both preview and print. Verified by rendering the default template. |
+| D2 | **C** | `core.js` `copyCount` | Quantity is silently capped at 1000 (`Math.min(n, 1000)`): a row asking for 1500 labels prints 1000 with no warning. |
+| D3 | **C** | `importers.js` | Rows beyond 10,000 and columns beyond 40 are **silently truncated**. |
+| D4 | H | `importers.js` | Numbers with >15 significant digits or very large values arrive as `1.2345678901234568e+21`-style text; no precision warning. |
+| D5 | H | `importers.js` | CSV assumed UTF-8. Arabic CSVs saved by Excel ("CSV (Comma delimited)") are Windows-1256 and import as mojibake. No TSV/semicolon support. |
+| D6 | H | `importers.js` | Dates always become `YYYY-MM-DD` and lose time; currency/percent/decimal number formats ignored (`0.15` with `0%` shows `0.15`). |
+| D7 | H | `App.jsx` storage | Templates live only in `localStorage`; a quota error is swallowed (`catch {}`) so saves can be **lost silently**. No file backup, no versions, no recovery. Delete is permanent. |
+| D8 | H | `App.jsx` `setSize` / `editDraft` | Number inputs sanitize on every keystroke. Retyping width "50" passes through "5" → clamped to 20 → all objects are clamped/shrunk into 20 mm (destructive). |
+| D9 | M | `App.jsx` template name | `sanitizeTemplate` replaces an empty name with "My template" while typing — the name box cannot be cleared. Each keystroke also creates an undo step. |
+| D10 | M | `App.jsx` drag | A click with no movement still pushes an undo snapshot. |
+| D11 | M | printing | Manual 100-label batches: printing 2,000 labels needs 20 manual clicks. No job history, no reprint, no PDF, no test print. |
+| D12 | M | printing | A successful `webContents.print` callback is reported as "Sent N labels" — not distinguished from physical success; printer status (offline/error) never checked. |
+| D13 | M | rendering | Font size in CSS px labelled "px"; label/printing industry and BarTender use points. Text that overflows its box is clipped with no warning. No vertical alignment. |
+| D14 | M | `electron/main.cjs` | IPC checks the sender `webContents` but not the frame URL; no permission handlers; `will-attach-webview` not blocked; production CSP still allows `ws:`. No Electron fuses. |
+| D15 | M | CI | `npm install` without lockfile; Windows job cannot be reproduced; no unit/integration split; no E2E. |
+| D16 | L | `core.js` | Dead barcode-era code (`printableRecords`, `isValidEAN`, `COLUMN_FIELDS`) still exported and tested. |
+| D17 | L | packaging | No application icon (`build/icon.ico`); EXE uses the default Electron icon. |
+| D18 | L | `importers.js` | Hidden rows/columns and merged cells imported without any indication. Legacy `.xls` rejected. |
+
+## 4. Architecture assessment
+
+- **Good foundations to keep:** strict column binding by header name (never substitutes another column), HTML escaping of spreadsheet data, millimetre coordinate model, sandboxed renderer with `contextIsolation`, header-row re-selection, cached formula results.
+- **Problems:** all UI state in one component; engine mixes legacy and new concepts; rendering and storage are not separable from React; no persistence layer; print path cannot be tested without a printer.
+
+## 5. Decisions
+
+1. Keep JavaScript (ES modules + JSDoc) instead of a TypeScript rewrite — the code works and a rewrite would add risk without user value. New engine modules are pure and unit-tested.
+2. Introduce a versioned template schema (v2) with a tested migration from v0.2.0 templates, so existing users keep their designs.
+3. Move persistence to files in the Electron `userData` folder (survives updates), with automatic one-time migration from `localStorage`.
+4. One deterministic renderer (HTML in mm/pt) shared by canvas preview, PDF export and printing.
+5. Upgrade Electron and electron-builder to current majors; override `uuid`.
+
+See `ARCHITECTURE.md` and `IMPLEMENTATION_PLAN.md`.

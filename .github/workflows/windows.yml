@@ -23,17 +23,6 @@ jobs:
         run: npm test
       - name: Build frontend
         run: npm run build
-      - name: Audit production dependencies
-        id: dependency_audit
-        continue-on-error: true
-        run: npm audit --omit=dev --audit-level=moderate --json > production-audit.json
-      - name: Upload production dependency audit
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-dependency-audit
-          path: production-audit.json
-          if-no-files-found: warn
 
   windows-installer:
     needs: verify

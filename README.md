@@ -31,7 +31,7 @@ Your results appear in:
 C:\Users\YOUSSEF\Desktop\freebar\BarTender_import_Excel\release\
 ```
 
-Look for an `Excel Label Studio Setup 0.4.0.exe` **installer** and a portable `Excel Label Studio 0.4.0.exe` (exact filenames can vary slightly with electron-builder). The installer installs the app on another Windows PC; the portable EXE runs without installation. **The receiving PC does not need Node.js or BarTender**.
+Look for an `Excel Label Studio Setup 0.2.0.exe` **installer** and a portable `Excel Label Studio 0.2.0.exe` (exact filenames can vary slightly with electron-builder). The installer installs the app on another Windows PC; the portable EXE runs without installation. **The receiving PC does not need Node.js or BarTender**.
 
 The Windows computer doing the build needs an internet connection for initial Electron downloads. The installed application can subsequently operate offline.
 
@@ -108,36 +108,3 @@ All imported spreadsheets are parsed on-device, no account, cloud database, or i
 `npm install` sometimes shows **deprecated dependencies and security findings** from the packaging toolchain. These warnings do not mean installation failed. Use `npm audit` for the exact dependency paths; do not blindly run `npm audit fix --force` because it can break Electron/Vite. Security audits and native printer smoke tests should be performed before distributing binaries broadly.
 
 This project is MIT licensed. See [LICENSE](LICENSE).
-
-
-## Designer improvements in v0.3.0
-
-The desktop workspace now includes functional **File, Edit, View, Insert, Data, and Print** menus; field duplication; undo/redo with Ctrl+Z / Ctrl+Y; Ctrl+S for template save, Ctrl+O for import and Ctrl+P to print. Zoom controls (50–200%), optional grid, per-record navigation, and clickable Excel column sorting help review your data before printing.
-
-Text fields support Arial, Tahoma, Segoe UI, Consolas or Times New Roman, plus bold, italic, underline, wrapping and 0°/90°/180°/270° rotation. These features need PDF/physical-print regression testing before being considered print-calibrated.
-
-The built-in reusable layouts are **Product label**, **Shelf / Stock label**, **Serial number label**, and **Shipping address**. The latter layouts expect their matching Excel headings (e.g. Serial, Recipient, Address, City); mismatches must be mapped explicitly, never automatically replaced with unrelated data.
-
-Supports **.xlsx, .csv and .tsv**, including tab-separated Arabic values. The same safe document renderer is used for preview, native Windows printing and **Export PDF**. PDF export is available in the installed Electron desktop application under the Print menu; a Save dialog writes the batch to a chosen .pdf file. PDF export remains runtime-unverified on Windows.
-
-This is original software with a BarTender-inspired professional workflow, **not a pixel-identical BarTender copy**. Full Automation/Professional feature parity is tracked in `docs/BARTENDER_FEATURE_COMPARISON.md` and `docs/TASKS.md`.
-
-## v0.4 — Safer template storage and visual resizing
-
-- Existing user templates are migrated **without deleting or silently resetting them**. The original localStorage key remains compatible with older v0.2/v0.3 saved template arrays.
-- Saved template libraries now use a versioned envelope (`version: 2`) and retain the previous known-good library as a recovery copy.
-- Failed or blocked storage writes show an error instead of falsely claiming the template was saved. Both damaged primary and backup data are preserved rather than overwritten.
-- Use **Back up all** to export every user template to portable JSON. Use **Import JSON** to merge the backup into another installation without overwriting existing templates.
-- The selected text object now has an on-canvas **resize handle**. Optionally enable **Snap 5 mm** to keep object positioning aligned to a fixed physical grid. Manual numerical X/Y/size inputs remain available.
-- Duplicate spreadsheet headers now **block printing** until corrected. This prevents selecting the wrong values when identical Excel column headings appear.
-- Unsaved edits trigger a discard confirmation when switching templates or leaving the application.
-
-### How to test these changes
-1. Launch v0.4. Import `sample/products.csv` and preview a 50 × 30 mm label.
-2. Create a new text field, resize it using the bottom-right handle, move it, then Undo and Redo.
-3. Turn on **Grid** and **Snap 5 mm**; move/resize the field and inspect its X/Y/width/height values.
-4. Save a template, close and reopen the application, and choose the saved template.
-5. Click **Back up all** to produce a .json backup. Import that JSON on a second Windows installation.
-6. Print one label from a text-only template, then compare the physical stock dimensions and PDF output.
-
-**Verification scope:** Automated project tests, Vite build and EXE packaging are CI-verified; on-canvas Electron interaction, PDF rendering, and actual printer output still require machine-level testing. Do not treat a successful OS print call as physical confirmation.
