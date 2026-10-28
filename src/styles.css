@@ -43,8 +43,11 @@ kbd { background: #fff; border: 1px solid var(--border-strong); border-bottom-wi
 .toolbar-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 5px; padding-left: 7px; border-left: 1px solid var(--border); background: var(--panel-2); }
 .toolbar-actions .btn-connect-printer { color: var(--accent-strong); font-weight: 600; border-color: #9abbee; background: var(--accent-weak); }
 .toolbar-actions .btn-connect-printer:hover { background: #d9e8ff; }
-.toolbar-actions { max-width: 76vw; overflow-x: auto; scrollbar-width: thin; }
+.toolbar-actions { min-width: 0; max-width: min(52vw, 370px); overflow-x: auto; scrollbar-width: thin; }
 .toolbar-actions > .btn { flex-shrink: 0; }
+.toolbar-printer-actions { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; padding-left: 6px; border-left: 1px solid var(--border); background: var(--panel-2); }
+.toolbar-printer-actions .btn-connect-printer { color: var(--accent-strong); font-weight: 600; border-color: #9abbee; background: var(--accent-weak); }
+.toolbar-printer-actions .btn-connect-printer:hover { background: #d9e8ff; }
 .toolbar .sep, .button-row .sep, .data-toolbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 5px; }
 .spacer { flex: 1; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid transparent; border-radius: 3px; background: none; padding: 0; color: #333c4a; }
