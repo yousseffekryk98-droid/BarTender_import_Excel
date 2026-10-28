@@ -26,12 +26,17 @@ export default function TextEditorDialog({ object, fields, headers, record, prom
   }, [object, ctx]);
   const [content, setContent] = useState(() => ({ ...object.content }));
   const [changedToFixed, setChangedToFixed] = useState(false);
+  const [prefix, setPrefix] = useState(object.prefix || '');
+  const [suffix, setSuffix] = useState(object.suffix || '');
+  const [insertColumn, setInsertColumn] = useState(fields[0] || '');
   const [error, setError] = useState('');
   const set = (patch) => { setContent((current) => ({ ...current, ...patch })); setError(''); };
   const setMode = (mode) => {
     if (mode === 'static' && object.content.mode !== 'static') {
       set({ mode, text: suggestedFixedText(object, preview) });
       setChangedToFixed(true);
+      setPrefix('');
+      setSuffix('');
     } else {
       set({ mode });
       setChangedToFixed(false);
@@ -40,7 +45,8 @@ export default function TextEditorDialog({ object, fields, headers, record, prom
   const save = () => {
     if (content.mode === 'field' && !String(content.field || '').trim()) { setError('Select or type an Excel column name.'); return; }
     if (content.mode === 'prompt' && !String(content.prompt || '').trim()) { setError('Select or type a prompt name.'); return; }
-    onSave(buildTextEditPatch(object, content, changedToFixed));
+    const patch = buildTextEditPatch(object, content, changedToFixed);
+    onSave({ ...patch, prefix, suffix });
   };
   return <Modal title={'Edit text — ' + (object.name || 'Text')} width={570} onClose={onClose} testId="text-editor"
     footer={<><Button onClick={onClose}>Cancel</Button><Button icon={Pencil} kind="primary" onClick={save} testId="save-text-edit">Save text</Button></>}>
@@ -52,6 +58,13 @@ export default function TextEditorDialog({ object, fields, headers, record, prom
           <textarea rows={5} value={content.text || ''} onChange={(e) => set({ text: e.target.value })} maxLength={5000} dir="auto"
             data-testid="edit-text-input" autoFocus />
         </label>
+        <div className="inline-field-picker">
+          <label className="field"><span className="field-label">Add a live Excel value after these words</span>
+            <input type="text" list="text-editor-columns" placeholder="Choose an Excel column" value={insertColumn} onChange={(e) => setInsertColumn(e.target.value)} data-testid="inline-insert-column" />
+          </label>
+          <Button testId="insert-excel-into-words" disabled={!insertColumn.trim()} onClick={() => { set({ mode: 'template', template: (content.text || '') + ' {' + insertColumn.trim() + '}' }); setChangedToFixed(false); }}>Insert Excel column</Button>
+        </div>
+        <p className="text-edit-note">Example: type "Price:" and insert the Price column to print "Price: 325" for one row and "Price: 150" for the next.</p>
       </>}
       {content.mode === 'field' && <>
         <label className="field"><span className="field-label">Excel column name</span>
@@ -66,6 +79,12 @@ export default function TextEditorDialog({ object, fields, headers, record, prom
         </label>
         <p className="text-edit-note">Use {'{Product Name}'} and {'{Price}'} to insert Excel fields. To make the label independent of Excel, choose Fixed text.</p>
       </>}
+      {content.mode === 'template' && <div className="inline-field-picker">
+        <label className="field"><span className="field-label">Insert another Excel column</span>
+          <input type="text" list="text-editor-columns" placeholder="Column name" value={insertColumn} onChange={(e) => setInsertColumn(e.target.value)} data-testid="template-insert-column" />
+        </label>
+        <Button testId="template-insert-excel" disabled={!insertColumn.trim()} onClick={() => set({ template: (content.template || '') + ' {' + insertColumn.trim() + '}' })}>Insert column</Button>
+      </div>}
       {content.mode === 'expression' && <label className="field"><span className="field-label">Expression</span>
         <textarea rows={4} className="mono" value={content.expression || ''} onChange={(e) => set({ expression: e.target.value })} data-testid="edit-text-expression" />
       </label>}
@@ -80,6 +99,14 @@ export default function TextEditorDialog({ object, fields, headers, record, prom
         <input value={content.prompt || ''} list="text-editor-prompts" onChange={(e) => set({ prompt: e.target.value })} data-testid="edit-text-prompt" />
         <datalist id="text-editor-prompts">{Object.keys(prompts).map((n) => <option key={n} value={n} />)}</datalist>
       </label>}
+      {(content.mode === 'field' || content.mode === 'template' || content.mode === 'expression' || content.mode === 'prompt') && <div className="grid-2">
+        <label className="field"><span className="field-label">Words before the value</span>
+          <input type="text" maxLength={200} value={prefix} placeholder="e.g. Price: " data-testid="text-prefix" onChange={(e) => setPrefix(e.target.value)} />
+        </label>
+        <label className="field"><span className="field-label">Words after the value</span>
+          <input type="text" maxLength={200} value={suffix} placeholder="e.g. EGP" data-testid="text-suffix" onChange={(e) => setSuffix(e.target.value)} />
+        </label>
+      </div>}
       {error && <p className="hint error" role="alert">{error}</p>}
       <p className="text-edit-note">Current label preview: <b>{preview || '(empty)'}</b></p>
     </div>
