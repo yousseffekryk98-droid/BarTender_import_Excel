@@ -85,6 +85,10 @@ function ContentEditor({ object, onPatch, fields, template, previewCtx }) {
     </>}
     {c.mode === 'prompt' && <SelectField label="Prompt" value={c.prompt} onChange={(prompt) => set({ prompt })}
       options={[{ value: '', label: template.prompts.length ? '— choose prompt —' : 'Add a prompt in Label properties' }, ...template.prompts.map((p) => ({ value: p.name, label: p.label || p.name }))]} />}
+    {c.mode !== 'static' && <Button testId="detach-excel-text" kind="ghost" onClick={() => onPatch({
+      content: { mode: 'static', text: previewError ? '' : preview },
+      prefix: '', suffix: '', format: { kind: 'none' }
+    })}>Make fixed text — stop using Excel / automatic source</Button>}
     <div className="grid-2">
       <TextField label="Prefix" value={object.prefix} onChange={(prefix) => onPatch({ prefix })} placeholder="SN: " testId="prefix" />
       <TextField label="Suffix" value={object.suffix} onChange={(suffix) => onPatch({ suffix })} placeholder=" EGP" testId="suffix" />
