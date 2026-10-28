@@ -18,7 +18,7 @@ function PrinterLine({ printer }) {
   </div>;
 }
 
-export default function PrintDialog({ template, connection, rows, selection, previewId, printers, onRefreshPrinters, onConnectPrinter, onClose, onPrinted, onSerialState, defaultPrinter }) {
+export default function PrintDialog({ template, connection, rows, selection, previewId, printers, onRefreshPrinters, onConnectPrinter, onClose, onPrinted, onSerialState, defaultPrinter, onEditRow, onEditLayout }) {
   const ask = useDialog();
   const table = connection?.table;
   const headers = table?.headers || [];
@@ -37,6 +37,11 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   const [ignoreStatus, setIgnoreStatus] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [printerFeedback, setPrinterFeedback] = useState(null);
+  const [fineShiftX, setFineShiftX] = useState(0.02);
+  const [editRowId, setEditRowId] = useState(null);
+  const [draftCells, setDraftCells] = useState([]);
+  const [draftOverrides, setDraftOverrides] = useState({});
+  const [editTab, setEditTab] = useState('cells');
   const abort = useRef(null);
   const printer = printers.find((p) => p.name === printerName);
   useEffect(() => {
@@ -66,11 +71,24 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     return rows;
   }, [usesData, table, scope, rows, selection, previewId, range]);
 
+  const printTemplate = useMemo(() => ({ ...template, page: { ...template.page, offsetX: Number((template.page.offsetX + fineShiftX).toFixed(3)) } }), [template, fineShiftX]);
   const plan = useMemo(() => planJob({
     template, headers, records, copies, ignoreQuantity: !useQuantity,
     quantityField: useQuantity ? template.data.quantityField : ''
   }), [template, headers, records, copies, useQuantity]);
 
+  const editingRecord = plan.entries.find((entry) => entry.record.id === editRowId)?.record;
+  const editableObjects = template.objects.filter((object) => object.type === 'text' && !object.hidden);
+  function startEditRow(id) {
+    const record = plan.entries.find((entry) => entry.record.id === id)?.record;
+    if (!record) return;
+    setEditRowId(record.id); setDraftCells([...record.cells]); setDraftOverrides({ ...(record.labelOverrides || {}) }); setEditTab('cells');
+  }
+  function saveEditedRow() {
+    if (!editingRecord) return;
+    onEditRow?.(editingRecord.id, draftCells, draftOverrides);
+    setEditRowId(null);
+  }
   const promptProblems = template.prompts.filter((p) => p.required && !String(promptValues[p.name] ?? '').trim()).map((p) => '"' + (p.label || p.name) + '" is required.');
   const blocking = [...(usesData && !table ? ['Connect an Excel/CSV file: this label uses columns (' + templateFieldNames(template).slice(0, 4).join(', ') + ').'] : []), ...plan.blocking, ...promptProblems];
 
@@ -124,7 +142,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     let pdfParts = [];
     try {
       const status = await buildChunks({
-        template, plan, headers, prompts: promptValues, signal: controller.signal, title: template.name,
+        template: printTemplate, plan, headers, prompts: promptValues, signal: controller.signal, title: template.name,
         onProgress: (done) => setProgress((p) => ({ ...p, done })),
         onChunk: async (chunk) => {
           if (mode === 'pdf') { pdfParts.push(chunk.html); return true; }
@@ -170,7 +188,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   }
 
   async function testPrint() {
-    const html = printDocumentHtml([testPatternLabelHtml(template.page)], template.page, { title: 'Alignment test' });
+    const html = printDocumentHtml([testPatternLabelHtml(printTemplate.page)], printTemplate.page, { title: 'Alignment test' });
     try {
       const r = await desktop.print.job({ html, page: paper, printerName, showDialog, ignoreStatus, labelCount: 1, meta: { templateId: template.id, templateName: template.name + ' (test)', source: 'test' } });
       setResult(r.ok ? { kind: 'ok', text: 'Alignment test sent. The border should sit 0.5 mm inside the label edge; adjust Offset X/Y in Label properties if it does not.' } : { kind: 'error', text: r.message || 'Test print failed.' });
@@ -202,6 +220,12 @@ export default function PrintDialog({ template, connection, rows, selection, pre
           <Check label="Show the Windows print dialog" checked={showDialog} onChange={setShowDialog} />
         </>}
         {!isDesktop && <p className="hint" data-testid="browser-printer-help">Direct printer selection requires the Windows desktop app. Your browser uses the system print dialog.</p>}
+        <fieldset>
+          <legend>Fine print alignment</legend>
+          <NumberField label="Extra X shift (mm; positive = right)" value={fineShiftX} min={-0.05} max={0.05} step={0.01}
+            decimals={3} onChange={setFineShiftX} testId="fine-x-shift" />
+          <p className="hint">Default +0.02 mm for printer and PDF; drivers may round to full printer dots.</p>
+        </fieldset>
         <fieldset disabled={!table}>
           <legend>Records</legend>
           <label className="radio"><input type="radio" checked={scope === 'selected'} onChange={() => setScope('selected')} /> Selected rows ({rows.filter((r) => selection.has(r.id)).length})</label>
@@ -241,9 +265,51 @@ export default function PrintDialog({ template, connection, rows, selection, pre
                 <div style={{ transform: 'scale(' + zoom + ')', transformOrigin: '0 0' }} dangerouslySetInnerHTML={{ __html: p.html }} />
               </div>
               <figcaption>Row {p.row}{p.copy > 1 ? ' · copy ' + p.copy : ''}</figcaption>
+              <Button testId={'edit-print-row-'+p.row} disabled={Boolean(progress)}
+                onClick={() => startEditRow(plan.entries.find(({ record }) => record.rowNumber === p.row)?.record.id)}>Edit row label</Button>
             </figure>;
           })}
         </div>
+        {table && plan.entries.length > 6 && <SelectField label="Edit any row" value={editRowId || ''} onChange={startEditRow}
+          options={[{ value: '', label: 'Choose an Excel row…' }, ...plan.entries.map(({ record }) => ({ value: record.id, label: 'Row '+record.rowNumber }))]}
+          testId="edit-row-picker" />}
+        {editingRecord && <div className="print-row-editor" data-testid="print-row-editor">
+          <div className="button-row">
+            <b>Editing label for row {editingRecord.rowNumber}</b><span className="spacer" />
+            <Button onClick={() => onEditLayout?.(editingRecord.id)}>Edit shared layout</Button>
+            <Button onClick={() => setEditRowId(null)}>Cancel</Button>
+            <Button kind="primary" onClick={saveEditedRow} testId="save-print-row">Apply to this row</Button>
+          </div>
+          <p className="hint">Only this Excel row and all its printed copies will change; your original Excel file will not.</p>
+          <div className="button-row">
+            <Button kind={editTab === 'cells' ? 'primary' : 'default'} onClick={() => setEditTab('cells')}>Excel cell values</Button>
+            <Button kind={editTab === 'labels' ? 'primary' : 'default'} onClick={() => setEditTab('labels')}>Final printed text</Button>
+          </div>
+          {editTab === 'cells' ? <div className="print-edit-fields">
+            {headers.map((name, i) => <label className="field" key={i}>
+              <span className="field-label">{name}</span>
+              <input type="text" value={draftCells[i] ?? ''} data-testid={'edit-print-cell-'+i}
+                onChange={(e) => setDraftCells((before) => before.map((v, j) => i === j ? e.target.value : v))}/>
+            </label>)}
+          </div> : <div className="print-edit-fields">
+            {editableObjects.map((object) => {
+              const sample = buildLabel(template, { headers, record: { ...editingRecord, cells: draftCells, labelOverrides: {} }, prompts: promptValues })
+                .items.find((item) => item.object.id === object.id)?.text || '';
+              const overridden = Object.prototype.hasOwnProperty.call(draftOverrides, object.id);
+              return <label className="field" key={object.id}>
+                <span className="field-label">{object.name || 'Text'} — {overridden ? 'custom for this row' : 'template value'}</span>
+                <div className="row-with-button">
+                  <input type="text" maxLength={5000} data-testid={'edit-print-text-'+object.id}
+                    value={overridden ? draftOverrides[object.id] : sample}
+                    onChange={(e) => setDraftOverrides((before) => ({ ...before, [object.id]: e.target.value }))} />
+                  {overridden && <button type="button" className="btn" onClick={() => setDraftOverrides((before) => {
+                    const next = { ...before }; delete next[object.id]; return next;
+                  })}>Reset</button>}
+                </div>
+              </label>;
+            })}
+          </div>}
+        </div>}
         {progress && <div className="progress" data-testid="print-progress">
           <div className="bar"><span style={{ width: Math.round((progress.done / Math.max(1, progress.total)) * 100) + '%' }} /></div>
           <span>{progress.mode === 'pdf' ? 'Preparing PDF' : 'Printing'} {progress.done.toLocaleString()} / {progress.total.toLocaleString()}</span>

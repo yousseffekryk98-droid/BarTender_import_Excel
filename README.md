@@ -92,6 +92,14 @@ Even though the sample contains a `Barcode` column, **text-only labels don't nee
 - Up to **30 label fields** and **50 saved templates**.
 - Search your spreadsheet rows; browse full imported columns by scrolling the table horizontally.
 
+## Imported Excel data and editing final print labels
+
+The bottom Data table has **Remove selected rows**, a remove button for each row, a delete icon on every column heading, and **Disconnect Excel**. Deletions affect only the loaded working copy; the original Excel file stays unchanged. Reimporting, reloading, or changing header row restores the source data. If a column is linked to a text object in your stamp, switch that object to Fixed text or another column before printing.
+
+In **Print**, click **Edit row label** under a thumbnail to edit a single row's Excel values or the final printed text for individual text objects. Changes affect every printed copy of that row and PDF export, but not other Excel rows or the actual spreadsheet. For more than six labels, choose any row using the selector. **Edit shared layout** returns to the designer for changes that apply to every row.
+
+**Fine right adjustment:** The Print dialog adds an extra **+0.02 mm X shift** by default, configurable between -0.05 and +0.05 mm in 0.01 mm steps. This shifts the print/PDF document, not the on-screen design. At 203 DPI one printer dot is ~0.125 mm, so a sub-0.05 mm adjustment may not be physically visible.
+
 ## Printing
 
 **Connect a printer:** Click **Connect printer** on the main toolbar or **Print → Connect printer…**. Choose a printer and click **Connect printer**. You can also connect from the Print dialog. The app checks that Windows lists the printer, reads its reported status, and saves your selection as the default. This is not a physical hardware handshake: use **Test print** in the Print dialog to confirm the device actually prints.

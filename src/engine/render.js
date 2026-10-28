@@ -33,6 +33,9 @@ export function buildLabel(template, contextOptions = {}) {
     }
     try {
       if (object.type === 'text' || object.type === 'barcode') item.text = resolveText(object, ctx);
+      if (object.type === 'text' && Object.prototype.hasOwnProperty.call(ctx.record?.labelOverrides || {}, object.id)) {
+        item.text = String(ctx.record.labelOverrides[object.id]).slice(0, 5000);
+      }
       if (object.type === 'table') {
         item.cells = object.cells.map((row) => row.map((cell) => {
           try { return resolveText({ ...cell, id: object.id }, ctx); } catch (error) { item.error = item.error || error.message; return '#ERR'; }

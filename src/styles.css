@@ -209,6 +209,11 @@ kbd { background: #fff; border: 1px solid var(--border-strong); border-bottom-wi
 .filter-chip button { border: 0; background: none; padding: 2px; }
 .grid-scroll { flex: 1; overflow: auto; min-height: 0; }
 .grid { border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.data-column-header { display: flex; align-items: center; min-width: 110px; }
+.data-column-header .th-btn { flex: 1; }
+.data-column-header .mini { flex-shrink: 0; color: var(--bad); margin-right: 3px; }
+.grid .row-action { width: 52px; text-align: center; }
+.data-toolbar .btn { flex-shrink: 0; }
 .grid th { position: sticky; top: 0; background: #f0f2f5; border-bottom: 1px solid var(--border-strong); border-right: 1px solid var(--border); font-weight: 600; text-align: left; padding: 0; z-index: 1; white-space: nowrap; }
 .th-btn { border: 0; background: none; padding: 4px 8px; width: 100%; display: flex; align-items: center; gap: 3px; font-weight: 600; text-align: left; }
 .grid td { border-bottom: 1px solid #eceef2; border-right: 1px solid #f0f1f4; padding: 0 8px; height: 24px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -258,6 +263,10 @@ legend { padding: 0 4px; font-weight: 600; color: var(--muted); }
 .summary-head b { font-size: 20px; }
 .preview-strip { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; background: var(--canvas); border-radius: 4px; min-height: 120px; margin: 6px 0; align-content: flex-start; }
 .preview-thumb { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.print-row-editor { margin: 10px 0; padding: 10px; background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: 4px; }
+.print-row-editor .button-row { margin-bottom: 8px; }
+.print-edit-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; max-height: 270px; overflow: auto; padding: 4px 1px; }
+.print-edit-fields .row-with-button { align-items: center; }
 .preview-thumb figcaption { font-size: 10.5px; color: #39404c; }
 .thumb-paper { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); overflow: hidden; position: relative; }
 .progress { display: flex; align-items: center; gap: 10px; }

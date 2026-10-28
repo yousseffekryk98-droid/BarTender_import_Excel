@@ -25,6 +25,7 @@ import { applyFilters, sortRecords, searchRecords } from '../engine/jobs.js';
 import { templateFieldNames, missingFields } from '../engine/binding.js';
 import { applyRenames } from '../engine/remap.js';
 import { readSpreadsheet, withHeaderRow } from '../data/importers.js';
+import { removeWorkingRows, removeWorkingColumn, editWorkingRow } from '../data/editing.js';
 import { handleAutomationRender } from '../render/automation.js';
 import { desktop, isDesktop } from '../platform/api.js';
 import { connectWindowsPrinter } from '../platform/printer-connection.js';
@@ -216,6 +217,44 @@ export default function App() {
     } catch (e) { notify(e.message, 'error'); }
   }
 
+  function editTable(transform) {
+    setConnection((state) => {
+      if (!state?.table) return state;
+      const table = transform(state.table);
+      return { ...state, table, sheets: state.sheets.map((sheet, i) => i === state.sheetIndex ? { ...sheet, table } : sheet) };
+    });
+  }
+  async function deleteRows(ids) {
+    if (!connection?.table || !ids.length) return;
+    const ok = await ask({ title: 'Remove rows', message: 'Exclude ' + ids.length + ' row(s) from this imported working copy and printing? The original Excel file will not change.', confirmLabel: 'Remove rows', danger: true });
+    if (!ok) return;
+    const excluded = new Set(ids.map(String));
+    editTable((table) => removeWorkingRows(table, excluded));
+    setRowSelection((before) => new Set([...before].filter((id) => !excluded.has(String(id)))));
+    setPreviewId((id) => excluded.has(String(id)) ? null : id);
+    notify('Removed ' + ids.length + ' row(s) from this import; Excel file unchanged.');
+  }
+  async function deleteColumn(index) {
+    const table = connection?.table;
+    if (!table?.headers[index]) return;
+    const name = table.headers[index];
+    const ok = await ask({ title: 'Remove Excel column', message: 'Exclude "' + name + '" from this imported copy? Linked label objects may require remapping or switching to fixed text. The original Excel file stays unchanged.', confirmLabel: 'Remove column', danger: true });
+    if (!ok) return;
+    editTable((t) => removeWorkingColumn(t, index));
+    notify('Removed column "' + name + '". Any linked label text may need updating.', 'warn');
+  }
+  function editRow(rowId, cells, overrides) {
+    try { editTable((t) => editWorkingRow(t, rowId, cells, overrides)); }
+    catch (e) { notify(e.message, 'error'); }
+  }
+  async function disconnectExcel() {
+    if (!connection) return;
+    const ok = await ask({ title: 'Disconnect Excel data', message: 'Remove the imported data and in-app edits? Your label template and original Excel file are kept.', confirmLabel: 'Disconnect', danger: true });
+    if (!ok) return;
+    setConnection(null); setRowSelection(new Set()); setPreviewId(null); setQuery('');
+    doc.update((t) => ({ ...t, data: { ...t.data, fileName: '', sheetName: '', quantityMode: 'fixed', quantityField: '', filters: [], sort: [] } }));
+    notify('Excel disconnected. Your label template remains available.');
+  }
   function changeSelection(mode, id) {
     setRowSelection((current) => {
       const next = new Set(current);
@@ -665,7 +704,8 @@ export default function App() {
     <section className="bottom">
       <DataPanel connection={connection} template={template} onChange={(fn) => doc.update(fn)} rows={rows} totalRows={processed.length} selection={rowSelection}
         onSelection={changeSelection} previewId={previewRecord?.id} onPreview={setPreviewId} query={query} onQuery={setQuery}
-        onOpenData={openWizard} onReload={reloadData} onSheet={chooseSheet} onHeaderRow={chooseHeaderRow} onShowWarnings={() => setDialog('warnings')} />
+        onOpenData={openWizard} onReload={reloadData} onSheet={chooseSheet} onHeaderRow={chooseHeaderRow} onShowWarnings={() => setDialog('warnings')}
+        onDeleteRows={deleteRows} onDeleteColumn={deleteColumn} onDisconnect={disconnectExcel} />
     </section>
     <footer className="statusbar" data-testid="statusbar">
       <span>{template.page.width} × {template.page.height} mm</span>
@@ -681,7 +721,8 @@ export default function App() {
     <div className="notices">{notices.map((n) => <Notice key={n.id} kind={n.kind} onClose={() => setNotices((x) => x.filter((y) => y.id !== n.id))}>{n.text}</Notice>)}</div>
 
     {dialog === 'print' && <PrintDialog template={template} connection={connection} rows={processed} selection={rowSelection} previewId={previewRecord?.id} printers={printers}
-      onRefreshPrinters={() => refreshPrinters(true)} onConnectPrinter={connectPrinter} onClose={() => setDialog(null)} onSerialState={saveSerialState} defaultPrinter={settings.defaultPrinter}
+      onRefreshPrinters={() => refreshPrinters(true)} onConnectPrinter={connectPrinter} onClose={() => setDialog(null)} onSerialState={saveSerialState}
+      onEditRow={editRow} onEditLayout={(id) => { setPreviewId(id); setDialog(null); }} defaultPrinter={settings.defaultPrinter}
       onPrinted={() => { if (template.page.printerName === '' && doc.storedId) { /* keep */ } }} />}
     {dialog === 'printer' && <PrinterConnectionDialog printers={printers} defaultPrinter={settings.defaultPrinter || ''} onRefreshPrinters={() => refreshPrinters(true)} onConnectPrinter={connectPrinter} onClose={() => setDialog(null)} />}
     {editingText && <TextEditorDialog key={editingText.id} object={editingText} fields={fieldChoices} headers={headers}

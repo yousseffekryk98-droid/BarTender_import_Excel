@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Filter, RefreshCw, FolderOpen, AlertTriangle, ArrowUp, ArrowDown, X, CheckSquare, Square as SquareIcon, Plus, EyeOff, Info } from 'lucide-react';
+import { Search, Filter, RefreshCw, FolderOpen, AlertTriangle, ArrowUp, ArrowDown, X, CheckSquare, Square as SquareIcon, Plus, EyeOff, Info, Trash2, Unplug } from 'lucide-react';
 import { Button, IconButton, SelectField } from './controls.jsx';
 import { FILTER_OPERATORS } from '../engine/schema.js';
 import { OPERATOR_LABELS } from './PropertiesPanel.jsx';
@@ -29,7 +29,7 @@ function FilterBar({ template, headers, onChange }) {
 
 export default function DataPanel({
   connection, template, onChange, rows, totalRows, selection, onSelection, previewId, onPreview, query, onQuery,
-  onOpenData, onReload, onSheet, onHeaderRow, onShowWarnings
+  onOpenData, onReload, onSheet, onHeaderRow, onShowWarnings, onDeleteRows, onDeleteColumn, onDisconnect
 }) {
   const scrollRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -85,6 +85,8 @@ export default function DataPanel({
       </label>
       <IconButton icon={RefreshCw} label="Reload file from disk" onClick={onReload} disabled={!connection.token} testId="reload-data" />
       <IconButton icon={FolderOpen} label="Open another file" onClick={onOpenData} />
+      <Button kind="danger" icon={Trash2} disabled={!selection.size} onClick={() => onDeleteRows([...selection])} testId="remove-selected-rows">Remove selected rows</Button>
+      <Button icon={Unplug} onClick={onDisconnect} testId="disconnect-excel">Disconnect Excel</Button>
       <span className="sep" />
       <div className="search"><Search size={14} /><input placeholder="Search rows" value={query} onChange={(e) => onQuery(e.target.value)} data-testid="row-search" /></div>
       <IconButton icon={Filter} label="Filters" active={showFilters || template.data.filters.length > 0} onClick={() => setShowFilters(!showFilters)} testId="toggle-filters" />
@@ -102,27 +104,33 @@ export default function DataPanel({
       <table className="grid" style={{ width: 'max-content', minWidth: '100%' }}>
         <thead><tr>
           <th className="sel"><button type="button" className="mini" onClick={() => onSelection(allVisibleSelected ? 'none-visible' : 'all-visible')} aria-label={allVisibleSelected ? 'Deselect shown rows' : 'Select shown rows'} data-testid="select-all">{allVisibleSelected ? <CheckSquare size={14} /> : <SquareIcon size={14} />}</button></th>
-          <th className="rownum">Row</th>
+          <th className="rownum">Row</th><th className="row-action">Remove</th>
           {headers.map((h, i) => {
             const s = template.data.sort.find((x) => headerKey(x.field) === headerKey(h));
-            return <th key={i} className={i === qIndex ? 'qty-col' : ''}><button type="button" className="th-btn" onClick={() => toggleSort(h)} title="Sort (saved with template, used for print order)">{h}{s && (s.dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}</button></th>;
+            return <th key={i} className={i === qIndex ? 'qty-col' : ''}><div className="data-column-header">
+              <button type="button" className="th-btn" onClick={() => toggleSort(h)} title="Sort (saved with template, used for print order)">{h}{s && (s.dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}</button>
+              <button type="button" className="mini" onClick={() => onDeleteColumn(i)} title={'Remove column '+h} aria-label={'Remove column '+h} data-testid={'remove-column-'+i}><Trash2 size={12} /></button>
+            </div></th>;
           })}
         </tr></thead>
         <tbody>
-          {start > 0 && <tr style={{ height: start * ROW_H }}><td colSpan={headers.length + 2} /></tr>}
+          {start > 0 && <tr style={{ height: start * ROW_H }}><td colSpan={headers.length + 3} /></tr>}
           {visible.map((r) => {
             const q = qIndex >= 0 ? parseQuantity(r.cells[qIndex]) : null;
             return <tr key={r.id} className={(selection.has(r.id) ? 'selected ' : '') + (r.id === previewId ? 'preview ' : '') + (r.hidden ? 'hidden-row' : '')} onClick={() => onPreview(r.id)} data-testid={'row-' + r.id}>
               <td className="sel" onClick={(e) => { e.stopPropagation(); onSelection('toggle', r.id); }}><input type="checkbox" checked={selection.has(r.id)} readOnly aria-label={'Select row ' + r.rowNumber} /></td>
               <td className="rownum">{r.rowNumber}{r.hidden && <EyeOff size={11} />}</td>
+              <td className="row-action"><button type="button" className="mini" title={'Remove row '+r.rowNumber} aria-label={'Remove row '+r.rowNumber}
+                data-testid={'remove-row-'+r.id} onClick={(e) => { e.stopPropagation(); onDeleteRows([r.id]); }}><Trash2 size={12}/></button></td>
               {headers.map((h, i) => <td key={i} dir="auto" className={(i === qIndex ? 'qty-col' : '') + (i === qIndex && q?.problem ? ' bad' : '')} title={i === qIndex && q?.problem ? q.problem : r.cells[i]}>{r.cells[i]}</td>)}
             </tr>;
           })}
-          {end < rows.length && <tr style={{ height: (rows.length - end) * ROW_H }}><td colSpan={headers.length + 2} /></tr>}
+          {end < rows.length && <tr style={{ height: (rows.length - end) * ROW_H }}><td colSpan={headers.length + 3} /></tr>}
         </tbody>
       </table>
       {!rows.length && <div className="empty-row">No rows match the search/filters.</div>}
     </div>
+    <div className="sort-note">Removing rows/columns only changes this import, not the Excel file. Reloading, changing the header row or reconnecting restores them. Removing a mapped column requires updating that label field.</div>
     {sort && <div className="sort-note">Sorted by {sort.field} ({sort.dir === 'asc' ? 'A→Z' : 'Z→A'}) — labels print in this order.</div>}
   </div>;
 }
