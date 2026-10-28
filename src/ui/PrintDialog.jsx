@@ -266,7 +266,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
               </div>
               <figcaption>Row {p.row}{p.copy > 1 ? ' · copy ' + p.copy : ''}</figcaption>
               <Button testId={'edit-print-row-'+p.row} disabled={Boolean(progress)}
-                onClick={() => startEditRow(plan.entries.find(({ record }) => record.rowNumber === p.row)?.record.id)}>Edit row label</Button>
+                onClick={() => table ? startEditRow(plan.entries.find(({ record }) => record.rowNumber === p.row)?.record.id) : onEditLayout?.('1')}>{table ? 'Edit row label' : 'Edit label layout'}</Button>
             </figure>;
           })}
         </div>
