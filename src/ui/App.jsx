@@ -624,6 +624,8 @@ export default function App() {
         <button type="button" className="btn" data-testid="tb-add-excel" onClick={() => addTool('field', undefined, true)} title="Choose a live Excel value"><Columns3 size={15} /> Excel value</button>
         <button type="button" className="btn" data-testid="tb-save-stamp" onClick={saveStamp} title="Save words, Excel columns and print positions"><Stamp size={15} /> Save stamp</button>
         <button type="button" className="btn" data-testid="tb-open-stamp" onClick={() => setDialog('stamps')} title="Open a saved stamp"><FolderOpen size={15} /> Stamps</button>
+      </div>
+      <div className="toolbar-printer-actions">
         <button type="button" className="btn btn-connect-printer" data-testid="tb-connect-printer" onClick={openPrinterSetup}
           title={settings.defaultPrinter ? 'Selected: ' + settings.defaultPrinter + ' — manage printer connection' : 'Find and connect a Windows printer'}>
           <Cable size={15} /> Connect printer
