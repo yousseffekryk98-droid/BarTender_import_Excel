@@ -36,7 +36,7 @@ export default function PrinterConnectionDialog({ printers, defaultPrinter, onRe
         {selected && <div className={'printer-status ' + (selected.blocking ? 'bad' : selected.problems?.length ? 'warn' : 'ok')}>Windows status: {selected.status}{selected.problems?.length ? ' — ' + selected.problems.join(', ') : ''}</div>}
         {feedback && <div role="status" data-testid="printer-setup-status" className={'printer-status ' + feedback.kind}>{feedback.text}</div>}
         {!printers.length && <p className="hint" data-testid="printer-setup-empty">No printers found. Power on your printer, install its manufacturer driver, add it under Windows Settings → Bluetooth & devices → Printers & scanners, and click Refresh.</p>}
-        <p className="hint">Windows manages USB, Bluetooth and network connections. Connect verifies the installed Windows printer, then saves it as the app default. Open Print → Test print to confirm actual hardware communication.</p>
+        <p className="hint">Windows manages USB, Bluetooth and network connections. Connect verifies the installed Windows printer, then saves it as the app default. Open the Print dialog and click Test print to confirm actual hardware communication.</p>
       </> : <p className="hint" data-testid="printer-setup-browser">Printer discovery is only available in the Windows desktop app. Browsers use the system print dialog.</p>}
     </div>
   </Modal>;
