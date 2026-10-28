@@ -51,7 +51,7 @@ export function useDocument(initial) {
   /** After a successful save: adopt stored revision without touching undo history. */
   const markSaved = useCallback((saved) => {
     setState((s) => {
-      const template = { ...s.template, id: saved.id, revision: saved.revision, updatedAt: saved.updatedAt, createdAt: saved.createdAt, serialState: saved.serialState, name: saved.name };
+      const template = { ...s.template, id: saved.id, revision: saved.revision, updatedAt: saved.updatedAt, createdAt: saved.createdAt, serialState: saved.serialState, name: saved.name, category: saved.category, description: saved.description, tags: saved.tags };
       return { ...s, template, savedJson: JSON.stringify(template), baseRevision: saved.revision, storedId: saved.id };
     });
   }, []);
