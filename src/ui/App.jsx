@@ -252,7 +252,7 @@ export default function App() {
     const ok = await ask({ title: 'Disconnect Excel data', message: 'Remove the imported data and in-app edits? Your label template and original Excel file are kept.', confirmLabel: 'Disconnect', danger: true });
     if (!ok) return;
     setConnection(null); setRowSelection(new Set()); setPreviewId(null); setQuery('');
-    doc.update((t) => ({ ...t, data: { ...t.data, fileName: '', sheetName: '', quantityMode: 'fixed', quantityField: '', filters: [], sort: [] } }));
+    doc.update((t) => ({ ...t, data: { ...t.data, fileName: '', sheetName: '' } }));
     notify('Excel disconnected. Your label template remains available.');
   }
   function changeSelection(mode, id) {
