@@ -52,6 +52,7 @@ export default function TextEditorDialog({ object, fields, headers, record, prom
     footer={<><Button onClick={onClose}>Cancel</Button><Button icon={Pencil} kind="primary" onClick={save} testId="save-text-edit">Save text</Button></>}>
     <div className="print-options">
       <SelectField label="Text source" value={content.mode} onChange={setMode} options={SOURCES} testId="text-source" />
+      <datalist id="text-editor-columns">{fields.map((field) => <option key={field} value={field} />)}</datalist>
       {content.mode === 'static' && <>
         {changedToFixed && <p className="text-edit-note"><ArrowRightLeft size={14} /> This replaces the Excel/automatic link with fixed text for every label. The original Excel data stays unchanged.</p>}
         <label className="field"><span className="field-label">Text on the label</span>
@@ -69,7 +70,6 @@ export default function TextEditorDialog({ object, fields, headers, record, prom
       {content.mode === 'field' && <>
         <label className="field"><span className="field-label">Excel column name</span>
           <input type="text" list="text-editor-columns" value={content.field || ''} onChange={(e) => set({ field: e.target.value })} data-testid="edit-text-field" />
-          <datalist id="text-editor-columns">{fields.map((f) => <option key={f} value={f} />)}</datalist>
         </label>
         <p className="text-edit-note">This is dynamic text, so every Excel row supplies its own value. Choose Fixed text above to type a permanent replacement.</p>
       </>}
