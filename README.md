@@ -37,6 +37,13 @@ The Windows computer doing the build needs an internet connection for initial El
 
 ## Editing text
 
+**Edit on the label itself:** Double-click fixed text in the preview to type directly on the paper. Click Save (or Ctrl+Enter), or press Escape to cancel. Select any text to reveal an Edit button; Excel-linked text opens its data source editor rather than losing the link.
+
+**Your own words beside Excel values:** Click **Excel value**, choose the source column, then type words before or after it (for example "Price: " before the Price column and " EGP" after). Each printed Excel row supplies its own number. Select the row to preview in the data table, and select the rows to print in the Print dialog.
+
+**Save a stamp:** Arrange words and dynamic fields using drag-and-drop or exact X/Y coordinates, then click **Save stamp**. Reuse it from **Stamps**. The saved design retains its size, positions, word labels, Excel **column names**, and formatting; it does not freeze values from the sample row. The PDF and printer use the same layout.
+
+
 Click a text object on the label, then **Edit text…** in Properties, or double-click the text object. Edit Fixed text directly. Excel-linked text is dynamic (each row uses the Excel cell); choose **Fixed text** in the editor to intentionally replace that link with typed text. This changes the label template, **not the spreadsheet**. When changing text in the regular Properties fields, press Enter or click outside to commit.
 
 The **Connect printer** button is pinned next to **Print** so it stays visible even when the toolbar is too narrow; other editing tools can scroll horizontally.

@@ -14,7 +14,7 @@ function Thumb({ template, max = 300 }) {
   </div>;
 }
 
-export default function TemplateManager({ templates, activeId, onClose, onOpen, onOpenVersion, onChanged, notify }) {
+export default function TemplateManager({ templates, activeId, onClose, onOpen, onOpenVersion, onChanged, notify, title = 'Templates' }) {
   const ask = useDialog();
   const [tab, setTab] = useState('templates');
   const [query, setQuery] = useState('');
@@ -67,7 +67,7 @@ export default function TemplateManager({ templates, activeId, onClose, onOpen, 
     favorite: (id, fav) => guard(async () => { await desktop.templates.favorite(id, fav); await onChanged(); })
   };
 
-  return <Modal title="Templates" onClose={onClose} width={1000} testId="template-manager" className="manager"
+  return <Modal title={title} onClose={onClose} width={1000} testId="template-manager" className="manager"
     footer={<>
       <Button icon={Upload} onClick={actions.importFiles} testId="import-templates">Import…</Button>
       <Button icon={Download} onClick={actions.exportAll} disabled={!templates.length}>Export all…</Button>

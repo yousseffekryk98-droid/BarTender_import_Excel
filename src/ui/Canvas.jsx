@@ -29,17 +29,32 @@ function Ruler({ orientation, lengthMm, zoom, offset, cursor }) {
  */
 export default function Canvas({
   template, selection, onSelect, onChange, onEndChange, zoom, onZoom, showGrid, gridSize, snapGrid, snapObjects,
-  headers, record, prompts, onDropField, onEditText, onCursor, onContextMenu, dataLoaded
+  headers, record, prompts, onDropField, onEditText, onTextCommit, onCursor, onContextMenu, dataLoaded
 }) {
   const scrollRef = useRef(null);
   const paperRef = useRef(null);
   const dragRef = useRef(null);
+  const inlineRef = useRef(null);
+  const [inlineEdit, setInlineEdit] = useState(null);
   const [guides, setGuides] = useState([]);
   const [marquee, setMarquee] = useState(null);
   const [cursor, setCursor] = useState(null);
   const [extras, setExtras] = useState({ barcodes: {}, barcodeErrors: {} });
   const [paperOffset, setPaperOffset] = useState({ x: 40, y: 40 });
   const page = template.page;
+  useEffect(() => { if (inlineEdit) { inlineRef.current?.focus(); inlineRef.current?.select(); } }, [inlineEdit?.id]);
+  function beginEdit(id) {
+    const obj = template.objects.find((o) => o.id === id);
+    if (!obj || obj.type !== 'text') return;
+    onSelect([id]);
+    if (obj.content.mode !== 'static') { onEditText?.(id); return; }
+    setInlineEdit({ id, text: obj.content.text || '' });
+  }
+  function finishEdit(shouldSave) {
+    if (!inlineEdit) return;
+    if (shouldSave) onTextCommit?.(inlineEdit.id, inlineEdit.text);
+    setInlineEdit(null);
+  }
   const scale = MM_TO_PX * zoom;
 
   const built = useMemo(() => buildLabel(template, {
@@ -110,7 +125,7 @@ export default function Canvas({
   }
 
   function onPointerDown(event) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || event.target.closest('[data-inline-editor]')) return;
     const handle = event.target.closest('[data-handle]');
     const hit = event.target.closest('[data-hit]');
     paperRef.current.parentElement.setPointerCapture(event.pointerId);
@@ -205,7 +220,7 @@ export default function Canvas({
       <div className="canvas-content" style={{ width: contentW, height: contentH }}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
         onPointerLeave={() => { setCursor(null); onCursor?.(null); }}
-        onDoubleClick={(e) => { const hit = e.target.closest('[data-hit]'); if (hit) onEditText?.(hit.dataset.hit); }}>
+        onDoubleClick={(e) => { if (e.target.closest('[data-inline-editor]')) return; const hit = e.target.closest('[data-hit]'); if (hit) beginEdit(hit.dataset.hit); }}>
         <div className={'canvas-paper' + (showGrid ? ' grid' : '')} ref={paperRef} style={{ ...paperStyle, ...gridStyle, borderRadius: page.cornerRadius * scale }} data-testid="canvas-paper">
           <style>{LABEL_CSS}</style>
           <div className="canvas-render" style={{ transform: 'scale(' + zoom + ')' }} dangerouslySetInnerHTML={{ __html: html }} />
@@ -221,6 +236,21 @@ export default function Canvas({
               };
               return <div key={o.id} className={'hit' + (isSelected ? ' selected' : '') + (o.locked ? ' locked' : '') + (clipped.has(o.id) ? ' clipped' : '')}
                 data-hit={o.id} style={style} title={(o.name || o.type) + (clipped.has(o.id) ? ' — text does not fit' : '') + (o.locked ? ' (locked)' : '')} data-testid={'object-' + (o.name || o.type)}>
+                {inlineEdit?.id === o.id && <div className="canvas-inline-editor" data-inline-editor data-testid="canvas-inline-editor" onDoubleClick={(e) => e.stopPropagation()}>
+                  <textarea ref={inlineRef} rows={3} value={inlineEdit.text} dir="auto" aria-label="Edit text directly on the label"
+                    data-testid="canvas-inline-input" maxLength={5000}
+                    onChange={(e) => setInlineEdit((draft) => draft && { ...draft, text: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); finishEdit(false); } else if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); finishEdit(true); } }}
+                    onBlur={(e) => { if (!e.currentTarget.parentElement?.contains(e.relatedTarget)) finishEdit(true); }} />
+                  <div className="canvas-inline-buttons">
+                    <button type="button" onClick={() => finishEdit(true)} data-testid="canvas-inline-save">Save</button>
+                    <button type="button" onClick={() => finishEdit(false)} data-testid="canvas-inline-cancel">Cancel</button>
+                  </div>
+                </div>}
+                {isSelected && o.type === 'text' && inlineEdit?.id !== o.id && <button type="button"
+                  className="canvas-edit-trigger" title="Edit text or choose an Excel column"
+                  onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onEditText?.(o.id); }}
+                  data-testid={'canvas-edit-' + o.id}>Edit</button>}
                 {isSelected && single && !o.locked && <>
                   {HANDLES.map((hd) => <span key={hd} className={'handle handle-' + hd} data-handle={hd} />)}
                   <span className="handle handle-rotate" data-handle="rotate" title="Rotate (Shift: free angle)" />

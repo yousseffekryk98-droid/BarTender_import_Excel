@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FilePlus2, FolderOpen, Save, Undo2, Redo2, Scissors, Copy, ClipboardPaste, Trash2, Database, RefreshCw, Printer, FileDown,
+  FilePlus2, FolderOpen, Save, Stamp, Type, Columns3, Undo2, Redo2, Scissors, Copy, ClipboardPaste, Trash2, Database, RefreshCw, Printer, FileDown,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   BringToFront, SendToBack, Group, Ungroup, ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet, Tag, Cable
 } from 'lucide-react';
@@ -297,6 +297,19 @@ export default function App() {
     }
   }
 
+  async function saveStamp() {
+    const name = await ask({ title: 'Save reusable stamp', message: 'Save these words, Excel column links and exact print positions together.', input: { defaultValue: template.name === 'New label' ? 'My stamp' : template.name }, confirmLabel: 'Save stamp' });
+    if (!name?.trim()) return;
+    try {
+      const saved = await desktop.templates.save({ ...template, id: newId('tpl'), revision: 0, name: name.trim(), category: 'Stamps' }, { createOnly: true });
+      doc.markSaved(saved);
+      await refreshTemplates();
+      await desktop.settings.update({ lastTemplateId: saved.id }).catch(() => {});
+      await desktop.autosave.clear().catch(() => {});
+      notify('Saved stamp "' + saved.name + '". Open it from Stamps to reuse your layout with other Excel rows.');
+    } catch (e) { notify('Could not save stamp: ' + e.message, 'error'); }
+  }
+
   async function saveSerialState(serialState) {
     doc.update((t) => ({ ...t, serialState }));
     if (!doc.storedId) { notify('Serial numbers continue from the last print only after the template is saved.', 'warn'); return; }
@@ -334,7 +347,7 @@ export default function App() {
     return { x: Math.max(0, Math.round((template.page.width - w) / 2 * 2) / 2), y: Math.max(0, Math.round((template.page.height - h) / 2 * 2) / 2) };
   }
 
-  async function addTool(tool, at) {
+  async function addTool(tool, at, editImmediately = false) {
     const w = Math.min(template.page.width - 4, 30);
     const pos = (ww, hh) => (at ? { x: at.x, y: at.y } : centerPosition(ww, hh));
     let object;
@@ -364,6 +377,7 @@ export default function App() {
     }
     if (object.x + object.width > template.page.width) object.width = Math.max(2, template.page.width - object.x);
     doc.addObjects([object]);
+    if (editImmediately && object.type === 'text') setEditingTextId(object.id);
   }
 
   function addField(name, at) {
@@ -467,6 +481,8 @@ export default function App() {
       { label: 'Open template…', shortcut: 'Ctrl+O', onClick: () => setDialog('manager') },
       { label: 'Save', shortcut: 'Ctrl+S', onClick: () => save() },
       { label: 'Save as…', shortcut: 'Ctrl+Shift+S', onClick: () => save({ saveAs: true }) },
+      { label: 'Save as stamp…', onClick: saveStamp },
+      { label: 'Open saved stamps…', onClick: () => setDialog('stamps') },
       '-',
       { label: 'Import templates…', onClick: async () => { const r = await desktop.templates.importDialog().catch((e) => notify(e.message, 'error')); if (r && !r.canceled) { await refreshTemplates(); notify('Imported ' + r.imported.length + ' template(s).' + (r.failed.length ? ' ' + r.failed.length + ' failed.' : ''), r.failed.length ? 'warn' : 'ok'); } } },
       { label: 'Export this template…', disabled: !doc.storedId, onClick: async () => { const r = await desktop.templates.exportDialog([doc.storedId], template.name).catch((e) => notify(e.message, 'error')); if (r?.path) notify('Exported to ' + r.path); } },
@@ -604,6 +620,10 @@ export default function App() {
       <IconButton icon={Magnet} label="Snap" active={view.snapGrid || view.snapObjects} onClick={() => setViewOption({ snapGrid: !(view.snapGrid || view.snapObjects), snapObjects: !(view.snapGrid || view.snapObjects) })} />
       </div>
       <div className="toolbar-actions">
+        <button type="button" className="btn" data-testid="tb-add-text" onClick={() => addTool('text', undefined, true)} title="Type text on your label"><Type size={15} /> Add text</button>
+        <button type="button" className="btn" data-testid="tb-add-excel" onClick={() => addTool('field', undefined, true)} title="Choose a live Excel value"><Columns3 size={15} /> Excel value</button>
+        <button type="button" className="btn" data-testid="tb-save-stamp" onClick={saveStamp} title="Save words, Excel columns and print positions"><Stamp size={15} /> Save stamp</button>
+        <button type="button" className="btn" data-testid="tb-open-stamp" onClick={() => setDialog('stamps')} title="Open a saved stamp"><FolderOpen size={15} /> Stamps</button>
         <button type="button" className="btn btn-connect-printer" data-testid="tb-connect-printer" onClick={openPrinterSetup}
           title={settings.defaultPrinter ? 'Selected: ' + settings.defaultPrinter + ' — manage printer connection' : 'Find and connect a Windows printer'}>
           <Cable size={15} /> Connect printer
@@ -624,7 +644,7 @@ export default function App() {
         <Canvas template={template} selection={selection} onSelect={(idsToSelect) => doc.select(idsToSelect)} onChange={(fn, coalesce) => doc.update(fn, { coalesce })} onEndChange={doc.endCoalesce}
           zoom={zoom} onZoom={setZoom} showGrid={view.grid} gridSize={view.gridSize} snapGrid={view.snapGrid} snapObjects={view.snapObjects}
           headers={headers} record={previewRecord} prompts={prompts} dataLoaded={Boolean(table)} onCursor={setCursor}
-          onDropField={({ field, tool, x, y }) => (field ? addField(field, { x, y }) : addTool(tool, { x, y }))} onEditText={editText} />
+          onDropField={({ field, tool, x, y }) => (field ? addField(field, { x, y }) : addTool(tool, { x, y }))} onEditText={editText} onTextCommit={(id, text) => doc.patchObjects([id], { content: { text } })} />
       </section>
       <aside className="right-panel"><div className="panel-title">Properties</div>
         <div className="panel-scroll">
@@ -668,6 +688,7 @@ export default function App() {
     {dialog === 'wizard' && <DatabaseWizard template={template} recentFiles={settings.recentDataFiles} onClose={() => setDialog(null)} onConnect={connectFromWizard}
       initial={connection ? { file: { name: connection.fileName, token: connection.token }, result: connection.result, sheetIndex: connection.sheetIndex } : null} />}
     {dialog === 'manager' && <TemplateManager templates={templates} activeId={doc.storedId} onClose={() => setDialog(null)} onOpen={openTemplate} onOpenVersion={openVersion} onChanged={refreshTemplates} notify={notify} />}
+    {dialog === 'stamps' && <TemplateManager title="Saved stamps" templates={templates.filter((t) => t.category === 'Stamps')} activeId={null} onClose={() => setDialog(null)} onOpen={openTemplate} onOpenVersion={openVersion} onChanged={refreshTemplates} notify={notify} />}
     {dialog === 'new' && <NewTemplateDialog onClose={() => setDialog(null)} onCreate={newFrom} />}
     {dialog === 'warnings' && <WarningsDialog warnings={table?.warnings || []} onClose={() => setDialog(null)} />}
     {dialog === 'history' && <JobHistoryDialog onClose={() => setDialog(null)} printers={printers} notify={notify} />}
