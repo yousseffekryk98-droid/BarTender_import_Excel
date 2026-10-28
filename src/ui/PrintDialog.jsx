@@ -6,6 +6,7 @@ import { buildLabel, printDocumentHtml, testPatternLabelHtml } from '../engine/r
 import { templateFieldNames } from '../engine/binding.js';
 import { validateJob, buildChunks, renderPreparedLabel, paperSize } from '../render/pipeline.js';
 import { desktop, isDesktop } from '../platform/api.js';
+import { printerConnectionMessage } from '../platform/printer-connection.js';
 import { LABEL_CSS } from '../engine/render.js';
 
 function PrinterLine({ printer }) {
@@ -17,7 +18,7 @@ function PrinterLine({ printer }) {
   </div>;
 }
 
-export default function PrintDialog({ template, connection, rows, selection, previewId, printers, onRefreshPrinters, onClose, onPrinted, onSerialState, defaultPrinter }) {
+export default function PrintDialog({ template, connection, rows, selection, previewId, printers, onRefreshPrinters, onConnectPrinter, onClose, onPrinted, onSerialState, defaultPrinter }) {
   const ask = useDialog();
   const table = connection?.table;
   const headers = table?.headers || [];
@@ -34,8 +35,28 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
   const [ignoreStatus, setIgnoreStatus] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [printerFeedback, setPrinterFeedback] = useState(null);
   const abort = useRef(null);
   const printer = printers.find((p) => p.name === printerName);
+  useEffect(() => {
+    if (!printerName && printers.length) {
+      setPrinterName(printers.find((p) => p.name === defaultPrinter)?.name || printers.find((p) => p.isDefault)?.name || printers[0].name);
+    }
+  }, [printers, printerName, defaultPrinter]);
+
+  async function connectSelectedPrinter() {
+    setPrinterFeedback(null);
+    setConnecting(true);
+    try { setPrinterFeedback(printerConnectionMessage(await onConnectPrinter(printerName))); }
+    catch (error) { setPrinterFeedback({ kind: 'bad', text: error.message || 'Printer check failed.' }); }
+    finally { setConnecting(false); }
+  }
+  async function refreshPrinterList() {
+    setPrinterFeedback(null);
+    try { await onRefreshPrinters(); }
+    catch (error) { setPrinterFeedback({ kind: 'bad', text: 'Could not refresh printers: ' + error.message }); }
+  }
 
   const records = useMemo(() => {
     if (!usesData && !table) return [{ id: '1', rowNumber: 1, cells: [], raw: [] }];
@@ -168,14 +189,19 @@ export default function PrintDialog({ template, connection, rows, selection, pre
       <div className="print-options">
         {isDesktop && <>
           <div className="row-with-button">
-            <SelectField label="Printer" value={printerName} onChange={setPrinterName} testId="printer-select"
-              options={[{ value: '', label: printers.length ? '— choose printer —' : 'No printers found' }, ...printers.map((p) => ({ value: p.name, label: p.displayName + (p.isDefault ? ' (default)' : '') }))]} />
-            <Button icon={RefreshCw} onClick={onRefreshPrinters} title="Refresh printers and status" />
+            <SelectField label="Printer" value={printerName} onChange={(name) => { setPrinterName(name); setPrinterFeedback(null); }} testId="printer-select"
+              options={[{ value: '', label: printers.length ? '— choose printer —' : 'No printers found' }, ...(printerName && !printer ? [{ value: printerName, label: 'Not found: ' + printerName }] : []), ...printers.map((p) => ({ value: p.name, label: p.displayName + (p.isDefault ? ' (Windows default)' : '') }))]} />
+            <Button icon={RefreshCw} onClick={refreshPrinterList} title="Refresh Windows printers" testId="refresh-printers" />
+            <Button onClick={connectSelectedPrinter} disabled={!printerName || connecting} testId="connect-printer">{connecting ? 'Checking…' : 'Connect'}</Button>
           </div>
           <PrinterLine printer={printer} />
+          {printerFeedback && <div className={'printer-status ' + printerFeedback.kind} role="status" data-testid="printer-connect-status">{printerFeedback.text}</div>}
+          {!printers.length && <p className="hint" data-testid="printer-help">No printers found. Add your printer in Windows Settings → Bluetooth & devices → Printers & scanners and click Refresh.</p>}
+          <p className="hint">Connect checks Windows printer availability and saves the selection. Use Test print to verify the physical printer.</p>
           {printer?.blocking && <Check label="Print anyway (ignore printer status)" checked={ignoreStatus} onChange={setIgnoreStatus} />}
           <Check label="Show the Windows print dialog" checked={showDialog} onChange={setShowDialog} />
         </>}
+        {!isDesktop && <p className="hint" data-testid="browser-printer-help">Direct printer selection requires the Windows desktop app. Your browser uses the system print dialog.</p>}
         <fieldset disabled={!table}>
           <legend>Records</legend>
           <label className="radio"><input type="radio" checked={scope === 'selected'} onChange={() => setScope('selected')} /> Selected rows ({rows.filter((r) => selection.has(r.id)).length})</label>

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FilePlus2, FolderOpen, Save, Undo2, Redo2, Scissors, Copy, ClipboardPaste, Trash2, Database, RefreshCw, Printer, FileDown,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  BringToFront, SendToBack, Group, Ungroup, ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet, Tag
+  BringToFront, SendToBack, Group, Ungroup, ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet, Tag, Cable
 } from 'lucide-react';
 import MenuBar from './MenuBar.jsx';
 import Canvas from './Canvas.jsx';
@@ -10,6 +10,7 @@ import LeftPanel from './LeftPanel.jsx';
 import PropertiesPanel from './PropertiesPanel.jsx';
 import DataPanel from './DataPanel.jsx';
 import PrintDialog from './PrintDialog.jsx';
+import PrinterConnectionDialog from './dialogs/PrinterConnectionDialog.jsx';
 import DatabaseWizard from './dialogs/DatabaseWizard.jsx';
 import TemplateManager from './dialogs/TemplateManager.jsx';
 import AutomationDialog from './dialogs/AutomationDialog.jsx';
@@ -25,6 +26,7 @@ import { applyRenames } from '../engine/remap.js';
 import { readSpreadsheet, withHeaderRow } from '../data/importers.js';
 import { handleAutomationRender } from '../render/automation.js';
 import { desktop, isDesktop } from '../platform/api.js';
+import { connectWindowsPrinter } from '../platform/printer-connection.js';
 
 const LEGACY_KEY = 'excel-label-studio:text-templates:v1';
 
@@ -69,7 +71,25 @@ export default function App() {
   }, []);
 
   const refreshTemplates = useCallback(async () => { try { setTemplates(await desktop.templates.list()); } catch (e) { notify('Could not list templates: ' + e.message, 'error'); } }, [notify]);
-  const refreshPrinters = useCallback(async (force) => { try { setPrinters(await desktop.print.printers(force)); } catch { setPrinters([]); } }, []);
+  const refreshPrinters = useCallback(async (force = false) => {
+    try {
+      const list = await desktop.print.printers(force);
+      setPrinters(list);
+      return list;
+    } catch (error) {
+      setPrinters([]);
+      throw error;
+    }
+  }, []);
+  const connectPrinter = useCallback(async (name) => {
+    const { printer } = await connectWindowsPrinter({
+      printerName: name,
+      listPrinters: refreshPrinters,
+      saveDefault: (selected) => desktop.settings.update({ defaultPrinter: selected })
+    });
+    setSettings((s) => ({ ...s, defaultPrinter: printer.name }));
+    return printer;
+  }, [refreshPrinters]);
 
   // ---------- startup ----------
   useEffect(() => {
@@ -97,7 +117,7 @@ export default function App() {
       else if (s.lastTemplateId) {
         try { doc.load(await desktop.templates.get(s.lastTemplateId), { stored: true }); } catch { /* deleted */ }
       }
-      refreshPrinters(false);
+      refreshPrinters(false).catch((error) => notify('Could not list Windows printers: ' + error.message, 'warn'));
       try {
         if (window.queryLocalFonts) {
           const list = await window.queryLocalFonts();
@@ -390,7 +410,8 @@ export default function App() {
     setView((v) => { const next = { ...v, ...patch }; desktop.settings.update({ showGrid: next.grid, snapToGrid: next.snapGrid, gridSize: next.gridSize }).catch(() => {}); return next; });
   }
 
-  const openPrint = () => { refreshPrinters(true); setDialog('print'); };
+  const openPrint = () => { refreshPrinters(true).catch((error) => notify('Could not refresh printers: ' + error.message, 'warn')); setDialog('print'); };
+  const openPrinterSetup = () => { refreshPrinters(true).catch((error) => notify('Could not refresh printers: ' + error.message, 'warn')); setDialog('printer'); };
   const openWizard = () => setDialog('wizard');
   const canEdit = selection.length > 0;
 
@@ -520,7 +541,8 @@ export default function App() {
     { id: 'print', label: 'Print', items: [
       { label: 'Print…', shortcut: 'Ctrl+P', onClick: openPrint },
       { label: 'Print history & reprint…', onClick: () => { refreshPrinters(false); setDialog('history'); }, disabled: !isDesktop },
-      { label: 'Refresh printers', onClick: () => refreshPrinters(true), disabled: !isDesktop }
+      { label: 'Connect printer…', onClick: openPrinterSetup },
+      { label: 'Refresh printers', onClick: () => refreshPrinters(true).catch((error) => notify(error.message, 'error')), disabled: !isDesktop }
     ] },
     { id: 'tools', label: 'Tools', items: [
       { label: 'Automation (watch folders, API)…', onClick: () => { refreshPrinters(false); setDialog('automation'); }, disabled: !isDesktop },
@@ -535,7 +557,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onF1);
   }, []);
 
-  const defaultPrinter = printers.find((p) => p.name === template.page.printerName) || printers.find((p) => p.isDefault);
+  const defaultPrinter = printers.find((p) => p.name === template.page.printerName) || printers.find((p) => p.name === settings.defaultPrinter) || printers.find((p) => p.isDefault);
   const one = selected.length === 1 ? selected[0] : null;
 
   return <div className="app" style={{ '--bottom-h': bottomHeight + 'px' }}>
@@ -578,6 +600,7 @@ export default function App() {
       <IconButton icon={Magnet} label="Snap" active={view.snapGrid || view.snapObjects} onClick={() => setViewOption({ snapGrid: !(view.snapGrid || view.snapObjects), snapObjects: !(view.snapGrid || view.snapObjects) })} />
       <span className="spacer" />
       <IconButton icon={FileDown} label="Print / Save PDF" onClick={openPrint} />
+      <button type="button" className="btn" data-testid="tb-connect-printer" onClick={openPrinterSetup}><Cable size={15} /> Connect printer</button>
       <button type="button" className="btn btn-primary print-btn" onClick={openPrint} data-testid="tb-print"><Printer size={15} /> Print</button>
     </div>
 
@@ -627,8 +650,9 @@ export default function App() {
     <div className="notices">{notices.map((n) => <Notice key={n.id} kind={n.kind} onClose={() => setNotices((x) => x.filter((y) => y.id !== n.id))}>{n.text}</Notice>)}</div>
 
     {dialog === 'print' && <PrintDialog template={template} connection={connection} rows={processed} selection={rowSelection} previewId={previewRecord?.id} printers={printers}
-      onRefreshPrinters={() => refreshPrinters(true)} onClose={() => setDialog(null)} onSerialState={saveSerialState} defaultPrinter={settings.defaultPrinter}
+      onRefreshPrinters={() => refreshPrinters(true)} onConnectPrinter={connectPrinter} onClose={() => setDialog(null)} onSerialState={saveSerialState} defaultPrinter={settings.defaultPrinter}
       onPrinted={() => { if (template.page.printerName === '' && doc.storedId) { /* keep */ } }} />}
+    {dialog === 'printer' && <PrinterConnectionDialog printers={printers} defaultPrinter={settings.defaultPrinter || ''} onRefreshPrinters={() => refreshPrinters(true)} onConnectPrinter={connectPrinter} onClose={() => setDialog(null)} />}
     {dialog === 'wizard' && <DatabaseWizard template={template} recentFiles={settings.recentDataFiles} onClose={() => setDialog(null)} onConnect={connectFromWizard}
       initial={connection ? { file: { name: connection.fileName, token: connection.token }, result: connection.result, sheetIndex: connection.sheetIndex } : null} />}
     {dialog === 'manager' && <TemplateManager templates={templates} activeId={doc.storedId} onClose={() => setDialog(null)} onOpen={openTemplate} onOpenVersion={openVersion} onChanged={refreshTemplates} notify={notify} />}

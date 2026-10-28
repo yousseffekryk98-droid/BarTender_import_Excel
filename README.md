@@ -81,6 +81,10 @@ Even though the sample contains a `Barcode` column, **text-only labels don't nee
 
 ## Printing
 
+**Connect a printer:** Click **Connect printer** on the main toolbar or **Print → Connect printer…**. Choose a printer and click **Connect printer**. You can also connect from the Print dialog. The app checks that Windows lists the printer, reads its reported status, and saves your selection as the default. This is not a physical hardware handshake: use **Test print** in the Print dialog to confirm the device actually prints.
+
+If **No printers found** appears, power on and plug in your printer, install the manufacturer's Windows driver, and add it in **Windows Settings → Bluetooth & devices → Printers & scanners**. Then click **Refresh** in the app. The browser-only preview cannot discover local Windows printers; use the desktop EXE.
+
 1. Install your manufacturer's **Windows printer driver**, set the stock width and height in Windows printer preferences.
 2. Print the first 1–2 rows to verify orientation and size.
 3. Select your Windows printer or choose **System print dialog**.
