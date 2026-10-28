@@ -579,6 +579,7 @@ export default function App() {
       <IconButton icon={Trash2} label="Delete" onClick={doc.removeSelected} disabled={!canEdit} testId="tb-delete" />
       <span className="sep" />
       <IconButton icon={Database} label="Database connection" shortcut="Ctrl+Shift+D" onClick={openWizard} testId="tb-database" />
+      <button type="button" className="btn" data-testid="tb-connect-printer" onClick={openPrinterSetup}><Cable size={15} /> Connect printer</button>
       <IconButton icon={RefreshCw} label="Reload data" onClick={reloadData} disabled={!connection?.token} />
       <span className="sep" />
       <IconButton icon={AlignStartVertical} label="Align left" onClick={() => ops.align('left')} disabled={!canEdit} />
@@ -600,7 +601,6 @@ export default function App() {
       <IconButton icon={Magnet} label="Snap" active={view.snapGrid || view.snapObjects} onClick={() => setViewOption({ snapGrid: !(view.snapGrid || view.snapObjects), snapObjects: !(view.snapGrid || view.snapObjects) })} />
       <span className="spacer" />
       <IconButton icon={FileDown} label="Print / Save PDF" onClick={openPrint} />
-      <button type="button" className="btn" data-testid="tb-connect-printer" onClick={openPrinterSetup}><Cable size={15} /> Connect printer</button>
       <button type="button" className="btn btn-primary print-btn" onClick={openPrint} data-testid="tb-print"><Printer size={15} /> Print</button>
     </div>
 
