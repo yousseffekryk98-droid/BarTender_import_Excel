@@ -35,6 +35,12 @@ Look for an `Excel Label Studio Setup 0.2.0.exe` **installer** and a portable `E
 
 The Windows computer doing the build needs an internet connection for initial Electron downloads. The installed application can subsequently operate offline.
 
+## Editing text
+
+Click a text object on the label, then **Edit text…** in Properties, or double-click the text object. Edit Fixed text directly. Excel-linked text is dynamic (each row uses the Excel cell); choose **Fixed text** in the editor to intentionally replace that link with typed text. This changes the label template, **not the spreadsheet**. When changing text in the regular Properties fields, press Enter or click outside to commit.
+
+The **Connect printer** button is pinned next to **Print** so it stays visible even when the toolbar is too narrow; other editing tools can scroll horizontally.
+
 ## How to design and save a label
 
 1. Click **Load example spreadsheet** or import your `.xlsx` / `.csv`.

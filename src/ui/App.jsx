@@ -11,6 +11,7 @@ import PropertiesPanel from './PropertiesPanel.jsx';
 import DataPanel from './DataPanel.jsx';
 import PrintDialog from './PrintDialog.jsx';
 import PrinterConnectionDialog from './dialogs/PrinterConnectionDialog.jsx';
+import TextEditorDialog from './dialogs/TextEditorDialog.jsx';
 import DatabaseWizard from './dialogs/DatabaseWizard.jsx';
 import TemplateManager from './dialogs/TemplateManager.jsx';
 import AutomationDialog from './dialogs/AutomationDialog.jsx';
@@ -56,6 +57,7 @@ export default function App() {
   const [zoom, setZoom] = useState(3);
   const [view, setView] = useState({ grid: true, gridSize: 1, snapGrid: true, snapObjects: true });
   const [dialog, setDialog] = useState(null);
+  const [editingTextId, setEditingTextId] = useState(null);
   const [notices, setNotices] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [recovery, setRecovery] = useState(null);
@@ -375,12 +377,12 @@ export default function App() {
     catch (e) { notify(e.message, 'error'); }
   }
 
-  async function editText(id) {
-    const o = template.objects.find((x) => x.id === id);
-    if (!o || o.type !== 'text' || o.locked) return;
-    if (o.content.mode !== 'static') { setLeftTab(null); notify('This text comes from "' + (o.content.field || o.content.mode) + '". Change its source in Properties → Data source.'); return; }
-    const value = await ask({ title: 'Edit text', message: 'Text (Ctrl+Enter to finish):', input: { defaultValue: o.content.text, multiline: true }, confirmLabel: 'OK' });
-    if (value !== null && value !== undefined) doc.patchObjects([id], { content: { text: value } });
+  function editText(id) {
+    const object = template.objects.find((item) => item.id === id);
+    if (object?.type === 'text') {
+      doc.select([id]);
+      setEditingTextId(id);
+    }
   }
 
   const ids = selection;
@@ -557,6 +559,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onF1);
   }, []);
 
+  const editingText = template.objects.find((o) => o.id === editingTextId && o.type === 'text');
   const defaultPrinter = printers.find((p) => p.name === template.page.printerName) || printers.find((p) => p.name === settings.defaultPrinter) || printers.find((p) => p.isDefault);
   const one = selected.length === 1 ? selected[0] : null;
 
@@ -566,6 +569,7 @@ export default function App() {
       <MenuBar menus={menus} />
     </header>
     <div className="toolbar" role="toolbar" aria-label="Main toolbar">
+      <div className="toolbar-tools">
       <IconButton icon={FilePlus2} label="New label" shortcut="Ctrl+N" onClick={() => setDialog('new')} testId="tb-new" />
       <IconButton icon={FolderOpen} label="Open template" shortcut="Ctrl+O" onClick={() => setDialog('manager')} testId="tb-open" />
       <IconButton icon={Save} label="Save" shortcut="Ctrl+S" onClick={() => save()} testId="tb-save" />
@@ -579,7 +583,6 @@ export default function App() {
       <IconButton icon={Trash2} label="Delete" onClick={doc.removeSelected} disabled={!canEdit} testId="tb-delete" />
       <span className="sep" />
       <IconButton icon={Database} label="Database connection" shortcut="Ctrl+Shift+D" onClick={openWizard} testId="tb-database" />
-      <button type="button" className="btn" data-testid="tb-connect-printer" onClick={openPrinterSetup}><Cable size={15} /> Connect printer</button>
       <IconButton icon={RefreshCw} label="Reload data" onClick={reloadData} disabled={!connection?.token} />
       <span className="sep" />
       <IconButton icon={AlignStartVertical} label="Align left" onClick={() => ops.align('left')} disabled={!canEdit} />
@@ -599,9 +602,15 @@ export default function App() {
       <IconButton icon={Maximize} label="Zoom to fit" shortcut="Ctrl+0" onClick={fitZoom} />
       <IconButton icon={Grid3x3} label="Grid" active={view.grid} onClick={() => setViewOption({ grid: !view.grid })} />
       <IconButton icon={Magnet} label="Snap" active={view.snapGrid || view.snapObjects} onClick={() => setViewOption({ snapGrid: !(view.snapGrid || view.snapObjects), snapObjects: !(view.snapGrid || view.snapObjects) })} />
-      <span className="spacer" />
-      <IconButton icon={FileDown} label="Print / Save PDF" onClick={openPrint} />
-      <button type="button" className="btn btn-primary print-btn" onClick={openPrint} data-testid="tb-print"><Printer size={15} /> Print</button>
+      </div>
+      <div className="toolbar-actions">
+        <button type="button" className="btn btn-connect-printer" data-testid="tb-connect-printer" onClick={openPrinterSetup}
+          title={settings.defaultPrinter ? 'Selected: ' + settings.defaultPrinter + ' — manage printer connection' : 'Find and connect a Windows printer'}>
+          <Cable size={15} /> Connect printer
+        </button>
+        <IconButton icon={FileDown} label="Print / Save PDF" onClick={openPrint} />
+        <button type="button" className="btn btn-primary print-btn" onClick={openPrint} data-testid="tb-print"><Printer size={15} /> Print</button>
+      </div>
     </div>
 
     <main className="workspace">
@@ -619,7 +628,7 @@ export default function App() {
       </section>
       <aside className="right-panel"><div className="panel-title">Properties</div>
         <div className="panel-scroll">
-          <PropertiesPanel template={template} selected={selected} fields={fieldChoices} headers={headers} record={previewRecord} prompts={prompts} printers={printers} fonts={fonts} dataLoaded={Boolean(table)}
+          <PropertiesPanel template={template} selected={selected} fields={fieldChoices} headers={headers} record={previewRecord} prompts={prompts} printers={printers} fonts={fonts} dataLoaded={Boolean(table)} onEditText={editText}
             onPatch={(idList, patch) => doc.patchObjects(idList, patch)} onChange={(fn) => doc.update(fn)} onPickImage={pickImage} />
         </div>
       </aside>
@@ -653,6 +662,9 @@ export default function App() {
       onRefreshPrinters={() => refreshPrinters(true)} onConnectPrinter={connectPrinter} onClose={() => setDialog(null)} onSerialState={saveSerialState} defaultPrinter={settings.defaultPrinter}
       onPrinted={() => { if (template.page.printerName === '' && doc.storedId) { /* keep */ } }} />}
     {dialog === 'printer' && <PrinterConnectionDialog printers={printers} defaultPrinter={settings.defaultPrinter || ''} onRefreshPrinters={() => refreshPrinters(true)} onConnectPrinter={connectPrinter} onClose={() => setDialog(null)} />}
+    {editingText && <TextEditorDialog key={editingText.id} object={editingText} fields={fieldChoices} headers={headers}
+      record={previewRecord} prompts={prompts} dateOrder={template.data.dateOrder} onClose={() => setEditingTextId(null)}
+      onSave={(change) => { doc.patchObjects([editingText.id], change); setEditingTextId(null); }} />}
     {dialog === 'wizard' && <DatabaseWizard template={template} recentFiles={settings.recentDataFiles} onClose={() => setDialog(null)} onConnect={connectFromWizard}
       initial={connection ? { file: { name: connection.fileName, token: connection.token }, result: connection.result, sheetIndex: connection.sheetIndex } : null} />}
     {dialog === 'manager' && <TemplateManager templates={templates} activeId={doc.storedId} onClose={() => setDialog(null)} onOpen={openTemplate} onOpenVersion={openVersion} onChanged={refreshTemplates} notify={notify} />}

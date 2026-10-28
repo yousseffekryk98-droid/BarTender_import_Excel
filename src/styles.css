@@ -38,7 +38,11 @@ kbd { background: #fff; border: 1px solid var(--border-strong); border-bottom-wi
 .menu-item:hover:not(:disabled) { background: var(--accent-weak); }
 .mi-shortcut { color: var(--faint); font-size: 11px; padding-left: 18px; }
 .menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
-.toolbar { display: flex; align-items: center; gap: 1px; padding: 3px 6px; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+.toolbar { display: flex; align-items: stretch; gap: 1px; padding: 3px 6px; background: var(--panel-2); border-bottom: 1px solid var(--border); min-width: 0; }
+.toolbar-tools { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 1px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.toolbar-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 5px; padding-left: 7px; border-left: 1px solid var(--border); background: var(--panel-2); }
+.toolbar-actions .btn-connect-printer { color: var(--accent-strong); font-weight: 600; border-color: #9abbee; background: var(--accent-weak); }
+.toolbar-actions .btn-connect-printer:hover { background: #d9e8ff; }
 .toolbar .sep, .button-row .sep, .data-toolbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 5px; }
 .spacer { flex: 1; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid transparent; border-radius: 3px; background: none; padding: 0; color: #333c4a; }
@@ -50,6 +54,9 @@ kbd { background: #fff; border: 1px solid var(--border-strong); border-bottom-wi
 .left-panel, .right-panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 .left-panel { border-right: 1px solid var(--border); }
 .right-panel { border-left: 1px solid var(--border); }
+.edit-text-action { padding: 8px 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border-bottom: 1px solid var(--border); }
+.edit-text-action .hint { margin: 2px 0 0; }
+.text-edit-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .panel-title { padding: 6px 10px; font-weight: 600; border-bottom: 1px solid var(--border); background: var(--panel-2); }
 .panel-scroll { overflow: auto; flex: 1; min-height: 0; }
 .center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }

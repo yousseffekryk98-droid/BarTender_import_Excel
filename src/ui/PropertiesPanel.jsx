@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Lock, Unlock, Eye, EyeOff, Trash2, Plus, ImagePlus, AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Italic, Underline, Strikethrough, Printer as PrinterIcon } from 'lucide-react';
+import { Lock, Unlock, Eye, EyeOff, Trash2, Plus, ImagePlus, Pencil, AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Italic, Underline, Strikethrough, Printer as PrinterIcon } from 'lucide-react';
 import { NumberField, TextField, SelectField, Check, ColorField, Section, IconButton, Button } from './controls.jsx';
 import { SAFE_FONTS, FILTER_OPERATORS, BARCODE_TYPES } from '../engine/schema.js';
 import { SYMBOLOGY_LABELS } from '../engine/barcode.js';
@@ -295,7 +295,7 @@ function PageEditor({ template, onChange, printers }) {
   </>;
 }
 
-export default function PropertiesPanel({ template, selected, onPatch, onChange, fields, headers, record, prompts, printers, fonts, onPickImage, dataLoaded }) {
+export default function PropertiesPanel({ template, selected, onPatch, onChange, fields, headers, record, prompts, printers, fonts, onPickImage, onEditText, dataLoaded }) {
   const previewCtx = useMemo(() => makeContext({ headers: headers || [], record: record || { cells: [] }, prompts, placeholders: !dataLoaded, dateOrder: template.data.dateOrder }), [headers, record, prompts, dataLoaded, template.data.dateOrder]);
   if (!selected.length) return <div className="props" data-testid="properties"><PageEditor template={template} onChange={onChange} printers={printers} /></div>;
   if (selected.length > 1) {
@@ -332,6 +332,10 @@ export default function PropertiesPanel({ template, selected, onPatch, onChange,
         <NumberField label="Rotation" unit="°" value={o.rotation} min={-360} max={360} step={15} decimals={1} onChange={(rotation) => patch({ rotation })} disabled={o.locked} testId="prop-rotation" />
       </div>
     </Section>
+    {o.type === 'text' && <div className="edit-text-action">
+      <Button icon={Pencil} kind="primary" testId="edit-object-text" onClick={() => onEditText(o.id)}>Edit text…</Button>
+      <span className="hint">Or double-click the text on the label. Excel-linked text can be converted to fixed text.</span>
+    </div>}
     {(o.type === 'text' || o.type === 'barcode') && <Section title="Data source"><ContentEditor object={o} onPatch={patch} fields={fields} template={template} previewCtx={previewCtx} /></Section>}
     {o.type === 'text' && <>
       <Section title="Format"><FormatEditor object={o} onPatch={patch} /></Section>
