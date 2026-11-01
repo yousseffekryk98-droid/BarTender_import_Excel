@@ -90,6 +90,7 @@ export async function barcodesFor(built) {
   const barcodes = {}; const barcodeErrors = {};
   for (const item of built.items) {
     if (item.object.type !== 'barcode' || !item.visible) continue;
+    if (built.allowMissing && !String(item.text ?? '').trim()) continue; // No value exists for the optional source; leave barcode blank.
     const result = await barcodeSvg(item.object, item.text);
     if (result.svg) barcodes[item.object.id] = result.svg; else if (!(built.allowMissing && !item.text)) barcodeErrors[item.object.id] = result.error;
   }
