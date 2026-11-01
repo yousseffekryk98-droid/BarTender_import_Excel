@@ -8,30 +8,45 @@ This is an **independent** application; it does not modify BarTender or bypass a
 
 The commands below run in PowerShell from your cloned repository, for example:
 
+Use **Windows 10/11 x64** and **Node.js 22 or newer** (the supported LTS installer is recommended), plus **Git**. Open PowerShell.
+
+If this is the first clone:
+
 ```powershell
-cd C:\Users\YOUSSEF\Desktop\freebar\BarTender_import_Excel
-git pull origin main
-npm install
-npm test
-npm run desktop:dev
+cd $env:USERPROFILE\Desktop
+git clone https://github.com/yousseffekryk98-droid/BarTender_import_Excel.git
+cd BarTender_import_Excel
 ```
 
-`npm run desktop:dev` **opens the app for development**; it does **not** create an EXE installer. Close it using `Ctrl+C` in PowerShell before building.
+If the repository is already on your computer, open PowerShell **inside its folder** instead. Then, for either case:
 
-To build both an installer EXE and a portable EXE, run:
+```powershell
+git switch main
+git pull --ff-only origin main
+node --version
+npm --version
+npm ci
+npm test
+npm run build
+```
+
+**Do not package if the tests or build fail.** For the optional Electron simulated-printer end-to-end tests, run `npm run test:e2e` before packaging. These tests do not replace a physical printer test.
+
+When the checks pass, create both Windows EXEs:
 
 ```powershell
 npm run dist:win
 explorer .\release
 ```
 
-Your results appear in:
+The filenames (for the current `package.json` version 1.0.0) are:
 
-```text
-C:\Users\YOUSSEF\Desktop\freebar\BarTender_import_Excel\release\
-```
+- `release\Excel-Label-Studio-Setup-1.0.0.exe` — installer
+- `release\Excel-Label-Studio-Portable-1.0.0.exe` — no-install portable app
 
-Look for an `Excel Label Studio Setup 0.2.0.exe` **installer** and a portable `Excel Label Studio 0.2.0.exe` (exact filenames can vary slightly with electron-builder). The installer installs the app on another Windows PC; the portable EXE runs without installation. **The receiving PC does not need Node.js or BarTender**.
+A brand-new build machine needs an internet connection for npm dependencies and Electron packaging downloads. The finished app works locally without a server. If you have already installed the app, back up its local template library before installing a new build. The installer config keeps app data on uninstall, and packaging should not overwrite saved design files, but an independent `.elslabel` export is still a useful backup.
+
+`npm run desktop:dev` opens the app in development mode for manual inspection; it does **not** create either EXE. Stop it with Ctrl+C before packaging.
 
 The Windows computer doing the build needs an internet connection for initial Electron downloads. The installed application can subsequently operate offline.
 
