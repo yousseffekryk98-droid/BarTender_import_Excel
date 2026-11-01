@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTemplate, createObject } from '../../src/engine/schema.js';
-import { planJob } from '../../src/engine/jobs.js';
+import { planJob, applyFilters } from '../../src/engine/jobs.js';
 import { buildLabel } from '../../src/engine/render.js';
 import { barcodesFor } from '../../src/render/pipeline.js';
 import { missingFields } from '../../src/engine/binding.js';
@@ -53,4 +53,13 @@ test('selected row IDs control counts, including selecting none and reselecting'
   assert.match(planJob({template:t,headers:['Name'],records,selectedIds:all}).blocking.join(' '), /No rows/);
   all.add('3');
   assert.equal(planJob({template:t,headers:['Name'],records,selectedIds:all}).total,1);
+});
+
+test('unavailable filter fields no longer discard every row before the optional print plan', () => {
+  const records = [{id:'2',cells:['Mouse'],raw:[]},{id:'3',cells:['Keyboard'],raw:[]}];
+  const filtered = applyFilters(records,['Name'],[
+    {field:'OldCode',op:'isNotEmpty',value:''},
+    {field:'Name',op:'isNotEmpty',value:''}
+  ]);
+  assert.equal(filtered.length,2);
 });
