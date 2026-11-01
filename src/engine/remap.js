@@ -1,5 +1,7 @@
 // Re-map template column bindings, e.g. when a new workbook calls "Product" "Item Name".
 import { headerKey } from './binding.js';
+import { objectFieldNames } from './schema.js';
+import { referencedFields, templateFields } from './expression.js';
 
 function replaceInTemplateText(text, from, to) {
   const key = headerKey(from);
@@ -49,8 +51,6 @@ export function applyRenames(template, renames) {
 
 // Deleting a working-copy column must detach ALL references in the template,
 // otherwise print planning rejects the job with "Column ... was not found".
-import { referencedFields } from './expression.js';
-
 function referencesDeleted(expression, key) {
   try { return referencedFields(expression || '').some((name) => headerKey(name) === key); }
   catch { return false; } // Preserve invalid expressions so existing validation can report them.
@@ -103,4 +103,12 @@ export function detachDeletedField(template, field) {
       sort: template.data.sort.filter((item) => headerKey(item.field) !== key)
     }
   };
+}
+
+/** IDs of label objects whose per-row overrides become stale when a column is deleted. */
+export function objectsUsingField(template, field) {
+  const key = headerKey(field);
+  return (template.objects || [])
+    .filter((object) => objectFieldNames(object, { templateFields, referencedFields }).some((name) => headerKey(name) === key))
+    .map((object) => object.id);
 }
