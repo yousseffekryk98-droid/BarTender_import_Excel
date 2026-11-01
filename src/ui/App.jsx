@@ -323,7 +323,7 @@ export default function App() {
         await desktop.settings.update({ lastTemplateId: saved.id }).catch(() => {});
         desktop.autosave.clear().catch(() => {});
         notify('Saved design "' + saved.name + '" locally on this computer.');
-        return true;
+        return saved;
       } catch (e) { notify('Save failed: ' + e.message, 'error'); return false; }
     }
     try {
@@ -332,13 +332,13 @@ export default function App() {
       await refreshTemplates();
       desktop.autosave.clear().catch(() => {});
       notify('Saved design "' + saved.name + '" locally (revision ' + saved.revision + ').');
-      return true;
+      return saved;
     } catch (e) {
       if (e.code === 'conflict') {
         const choice = await ask({ title: 'Template changed elsewhere', message: e.message + ' What do you want to do?', buttons: [{ label: 'Cancel', value: 'cancel' }, { label: 'Save as a copy', value: 'copy' }, { label: 'Overwrite', value: 'overwrite', kind: 'danger' }], cancelValue: 'cancel' });
         if (choice === 'copy') return save({ saveAs: true });
         if (choice === 'overwrite') {
-          try { const saved = await desktop.templates.save(template, { force: true }); doc.markSaved(saved); await refreshTemplates(); notify('Saved (overwrote the other change; it is kept in version history).'); return true; }
+          try { const saved = await desktop.templates.save(template, { force: true }); doc.markSaved(saved); await refreshTemplates(); notify('Saved (overwrote the other change; it is kept in version history).'); return saved; }
           catch (err) { notify('Save failed: ' + err.message, 'error'); }
         }
         return false;
@@ -350,13 +350,14 @@ export default function App() {
   }
 
   async function exportDesignExcel() {
+    let design = template;
     if (!doc.storedId || doc.dirty) {
-      const saved = await save();
-      if (!saved) return;
+      design = await save();
+      if (!design) return;
     }
     try {
-      const { bytes, columns } = await createDesignWorkbook(template);
-      const result = await desktop.data.exportDesignExcel(template.name, bytes);
+      const { bytes, columns } = await createDesignWorkbook(design);
+      const result = await desktop.data.exportDesignExcel(design.name, bytes);
       if (result?.canceled) return;
       notify('Excel starter exported with ' + columns.length + ' column(s): ' + columns.join(', ') + '. Fill the Data tab and connect it to this design.');
     } catch (error) { notify('Excel export failed: ' + error.message, 'error'); }
