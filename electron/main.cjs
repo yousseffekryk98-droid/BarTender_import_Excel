@@ -6,6 +6,7 @@ const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { TemplateStore } = require('./store.cjs');
 const { PrintService } = require('./print-service.cjs');
+const { openPrinterPreferences } = require('./printer-preferences.cjs');
 const { AutomationService } = require('./automation/index.cjs');
 const v = require('./ipc-validate.cjs');
 
@@ -275,6 +276,9 @@ function registerIpc() {
 
   // printing
   handle('print:printers', (refresh) => printer.listPrinters({ refreshStatus: Boolean(refresh) }));
+  handle('print:preferences', (name) => openPrinterPreferences(v.str(name, 'printer', { min: 1, max: 300 }), {
+    getPrinters: () => mainWindow.webContents.getPrintersAsync()
+  }));
   handle('print:job', (request) => printer.print(v.printRequest(request)));
   handle('print:cancelled', (jobId) => printer.markCancelled(v.str(jobId, 'job id', { pattern: v.UUID })));
   handle('print:pdf-dialog', async (request) => {
