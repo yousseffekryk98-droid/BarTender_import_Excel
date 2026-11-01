@@ -453,6 +453,7 @@ export function renderTextTemplate(source, ctx) {
     if (part.k === 'text') return part.value;
     if (part.k === 'field') return asText(ctx.field(part.name));
     if (part.k === 'prompt') return asText(ctx.prompt(part.name));
+    if (ctx.allowMissing && referencedFields(part.source).some((name) => ctx.isMissingField?.(name))) return '';
     return asText(evaluateExpression(part.source, ctx));
   }).join('');
 }
