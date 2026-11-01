@@ -143,6 +143,16 @@ const browserBridge = {
     async clear() { localStorage.removeItem(KEY + ':autosave'); }
   },
   data: {
+    async exportDesignExcel(name, bytes) {
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const safeName = String(name || 'label-data').replace(/[^a-z0-9 _-]+/gi, '-').slice(0, 80) || 'label-data';
+      link.href = url; link.download = safeName + '-data.xlsx';
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      return { path: 'download' };
+    },
     async openDialog() {
       const [file] = await pickFile('.xlsx,.xlsm,.xls,.csv,.tsv,.txt');
       if (!file) return { canceled: true };
