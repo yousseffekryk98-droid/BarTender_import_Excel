@@ -65,7 +65,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     setOpeningPreferences(true);
     try {
       await desktop.print.preferences(printerName);
-      setPrinterFeedback({ kind: 'ok', text: 'Windows Printing Preferences opened. Set Darkness / Density / Heat if available, click Apply or OK, then use Test print.' });
+      setPrinterFeedback({ kind: 'ok', text: 'Windows Printing Preferences requested. Set Darkness / Density / Heat if the driver shows it, click Apply or OK, then use Test print. If no window appears, check the manufacturer driver.' });
     } catch (error) {
       setPrinterFeedback({ kind: 'bad', text: error.message || 'Could not open printer preferences.' });
     } finally { setOpeningPreferences(false); }
