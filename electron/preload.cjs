@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('labelDesktop', {
   },
   data: {
     openDialog: () => call('data:open-dialog'),
+    exportDesignExcel: (name, bytes) => call('data:export-design-excel', { name, bytes }),
     reload: (token) => call('data:reload', token),
     forget: (token) => call('data:forget', token)
   },
