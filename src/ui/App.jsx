@@ -357,7 +357,7 @@ export default function App() {
     }
     try {
       const { bytes, columns } = await createDesignWorkbook(design);
-      const result = await desktop.data.exportDesignExcel(design.name, bytes);
+      const result = await desktop.data.exportDesignExcel(design.name, Array.from(bytes));
       if (result?.canceled) return;
       notify('Excel starter exported with ' + columns.length + ' column(s): ' + columns.join(', ') + '. Fill the Data tab and connect it to this design.');
     } catch (error) { notify('Excel export failed: ' + error.message, 'error'); }
