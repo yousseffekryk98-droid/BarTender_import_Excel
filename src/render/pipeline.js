@@ -90,8 +90,9 @@ export async function barcodesFor(built) {
   const barcodes = {}; const barcodeErrors = {};
   for (const item of built.items) {
     if (item.object.type !== 'barcode' || !item.visible) continue;
+    if (built.allowMissing && !String(item.text ?? '').trim()) continue; // No value exists for the optional source; leave barcode blank.
     const result = await barcodeSvg(item.object, item.text);
-    if (result.svg) barcodes[item.object.id] = result.svg; else barcodeErrors[item.object.id] = result.error;
+    if (result.svg) barcodes[item.object.id] = result.svg; else if (!(built.allowMissing && !item.text)) barcodeErrors[item.object.id] = result.error;
   }
   return { barcodes, barcodeErrors };
 }
@@ -112,13 +113,13 @@ export function paperSize(page) {
  * Validate a planned job by evaluating every label once (expressions, barcodes, clipping),
  * without building documents. Returns { errors, clipped, barcodeErrors, checked }.
  */
-export async function validateJob({ template, plan, headers, prompts, sources, now, limit = 5000, onProgress, signal }) {
+export async function validateJob({ template, plan, headers, prompts, sources, now, allowMissing = false, limit = 5000, onProgress, signal }) {
   const errors = []; const clipped = []; const barcodeErrors = [];
   const serialStart = serialStartsFor(template);
   let checked = 0;
   for (const label of iterateLabels(plan, 0, Math.min(plan.total, limit))) {
     if (signal?.aborted) break;
-    const built = buildLabel(template, { headers, record: label.record, prompts, sources, now, recordNumber: label.recordIndex + 1, recordIndex: label.recordIndex, labelNumber: label.labelIndex + 1, labelIndex: label.labelIndex, copyNumber: label.copyNumber, copies: label.copies, serialStart });
+    const built = buildLabel(template, { headers, record: label.record, prompts, sources, now, allowMissing, recordNumber: label.recordIndex + 1, recordIndex: label.recordIndex, labelNumber: label.labelIndex + 1, labelIndex: label.labelIndex, copyNumber: label.copyNumber, copies: label.copies, serialStart });
     const where = 'Row ' + (label.record.rowNumber ?? label.record.id);
     for (const e of built.errors) if (errors.length < 50) errors.push(where + ': ' + e);
     if (label.copyNumber === 1 || template.objects.some((o) => o.content?.mode === 'serial' || o.content?.mode === 'expression')) {
@@ -137,7 +138,7 @@ export async function validateJob({ template, plan, headers, prompts, sources, n
  * Build print documents for a planned job in spool-sized chunks.
  * Calls onChunk({ html, labelCount, index, count, start, end }) sequentially; stops when signal aborts.
  */
-export async function buildChunks({ template, plan, headers, prompts, sources, now, onChunk, onProgress, signal, chunkSize = SPOOL_CHUNK, title }) {
+export async function buildChunks({ template, plan, headers, prompts, sources, now, allowMissing = false, onChunk, onProgress, signal, chunkSize = SPOOL_CHUNK, title }) {
   const ranges = chunkRanges(plan.total, chunkSize);
   const serialStart = serialStartsFor(template);
   let done = 0;

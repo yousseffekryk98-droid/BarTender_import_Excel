@@ -48,7 +48,7 @@ export function buildLabel(template, contextOptions = {}) {
     if (item.error) errors.push((object.name || object.type) + ': ' + item.error);
     return item;
   });
-  return { items, errors, missing: [...ctx.missing] };
+  return { items, errors, missing: [...ctx.missing], allowMissing: ctx.allowMissing };
 }
 
 function boxStyle(object, page, extra = []) {

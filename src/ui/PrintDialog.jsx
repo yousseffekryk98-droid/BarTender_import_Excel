@@ -3,7 +3,7 @@ import { Printer, FileDown, RefreshCw, Ruler, AlertTriangle, CheckCircle2, XCirc
 import { Modal, Button, SelectField, NumberField, Check, TextField, useDialog } from './controls.jsx';
 import { planJob, serialStateAfter, serialStartsFor, CONFIRM_LABELS_ABOVE } from '../engine/jobs.js';
 import { buildLabel, printDocumentHtml, testPatternLabelHtml } from '../engine/render.js';
-import { templateFieldNames } from '../engine/binding.js';
+import { templateFieldNames, resolveColumn } from '../engine/binding.js';
 import { validateJob, buildChunks, renderPreparedLabel, paperSize } from '../render/pipeline.js';
 import { desktop, isDesktop } from '../platform/api.js';
 import { printerConnectionMessage } from '../platform/printer-connection.js';
@@ -26,7 +26,11 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   const usesData = templateFieldNames(template).length > 0;
   const [printerName, setPrinterName] = useState(template.page.printerName || defaultPrinter || printers.find((p) => p.isDefault)?.name || '');
   const [showDialog, setShowDialog] = useState(!isDesktop);
-  const [scope, setScope] = useState(selection.size ? 'selected' : 'all');
+  const [scope, setScope] = useState('selected');
+  const [selectedPrintIds, setSelectedPrintIds] = useState(() => new Set(rows.map((record) => record.id)));
+  const [selectedObjectIds, setSelectedObjectIds] = useState(() => new Set(template.objects
+    .filter((object) => !object.hidden && object.printable !== false).map((object) => object.id)));
+  const [allowMissing, setAllowMissing] = useState(true);
   const [range, setRange] = useState({ from: rows[0]?.rowNumber || 1, to: rows[rows.length - 1]?.rowNumber || 1 });
   const [useQuantity, setUseQuantity] = useState(template.data.quantityMode === 'field' && Boolean(template.data.quantityField));
   const [copies, setCopies] = useState(template.page.copies || 1);
@@ -77,26 +81,33 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   }
 
   const records = useMemo(() => {
-    if (!usesData && !table) return [{ id: '1', rowNumber: 1, cells: [], raw: [] }];
-    if (scope === 'selected') return rows.filter((r) => selection.has(r.id));
+    if (!table) return [{ id: '1', rowNumber: 1, cells: [], raw: [] }];
+    if (scope === 'selected') return rows.filter((r) => selectedPrintIds.has(r.id));
     if (scope === 'current') return rows.filter((r) => r.id === previewId).slice(0, 1);
     if (scope === 'range') return rows.filter((r) => r.rowNumber >= range.from && r.rowNumber <= range.to);
     return rows;
-  }, [usesData, table, scope, rows, selection, previewId, range]);
+  }, [table, scope, rows, selectedPrintIds, previewId, range]);
 
-  const printTemplate = useMemo(() => ({ ...template, page: { ...template.page, offsetX: Number((template.page.offsetX + fineShiftX).toFixed(3)) } }), [template, fineShiftX]);
+  const printTemplate = useMemo(() => ({
+    ...template,
+    page: { ...template.page, offsetX: Number((template.page.offsetX + fineShiftX).toFixed(3)) },
+    objects: template.objects.filter((object) => selectedObjectIds.has(object.id) && !object.hidden).map((object) => ({ ...object, printable: true }))
+  }), [template, fineShiftX, selectedObjectIds]);
+  const missingQuantity = Boolean(useQuantity && template.data.quantityField &&
+    resolveColumn(headers, template.data.quantityField) < 0);
   const plan = useMemo(() => planJob({
-    template, headers, records, copies, ignoreQuantity: !useQuantity,
-    quantityField: useQuantity ? template.data.quantityField : ''
-  }), [template, headers, records, copies, useQuantity]);
+    template: printTemplate, headers, records, copies, allowMissing,
+    ignoreQuantity: !useQuantity || missingQuantity,
+    quantityField: useQuantity && !missingQuantity ? template.data.quantityField : ''
+  }), [printTemplate, headers, records, copies, useQuantity, missingQuantity, template.data.quantityField, allowMissing]);
 
-  const editingRecord = plan.entries.find((entry) => entry.record.id === editRowId)?.record;
-  const maxGridPage = Math.max(0, Math.ceil(plan.entries.length / 15) - 1);
+  const editingRecord = rows.find((record) => record.id === editRowId);
+  const maxGridPage = Math.max(0, Math.ceil(rows.length / 15) - 1);
   const currentGridPage = Math.min(gridPage, maxGridPage);
-  const visiblePrintRecords = plan.entries.slice(currentGridPage * 15, (currentGridPage + 1) * 15);
-  const editableObjects = template.objects.filter((object) => object.type === 'text' && !object.hidden);
+  const visiblePrintRecords = rows.slice(currentGridPage * 15, (currentGridPage + 1) * 15);
+  const editableObjects = printTemplate.objects.filter((object) => object.type === 'text');
   function startEditRow(id) {
-    const record = plan.entries.find((entry) => entry.record.id === id)?.record;
+    const record = rows.find((entry) => entry.id === id);
     if (!record) return;
     setEditRowId(record.id); setDraftCells([...record.cells]); setDraftOverrides({ ...(record.labelOverrides || {}) }); setEditTab('cells');
   }
@@ -106,7 +117,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     setEditRowId(null);
   }
   const promptProblems = template.prompts.filter((p) => p.required && !String(promptValues[p.name] ?? '').trim()).map((p) => '"' + (p.label || p.name) + '" is required.');
-  const blocking = [...(usesData && !table ? ['Connect an Excel/CSV file: this label uses columns (' + templateFieldNames(template).slice(0, 4).join(', ') + ').'] : []), ...plan.blocking, ...promptProblems];
+  const blocking = [...plan.blocking, ...promptProblems];
 
   // validate (expressions, barcodes, clipped text) and build previews
   useEffect(() => {
@@ -116,17 +127,17 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     const timer = setTimeout(async () => {
       const controller = new AbortController();
       abort.current = controller;
-      const c = await validateJob({ template, plan, headers, prompts: promptValues, limit: 3000, signal: controller.signal });
+      const c = await validateJob({ template: printTemplate, plan, headers, prompts: promptValues, allowMissing, limit: 3000, signal: controller.signal });
       if (cancelled) return;
       setCheck(c);
       const shots = [];
-      const serialStart = serialStartsFor(template);
+      const serialStart = serialStartsFor(printTemplate);
       let base = 0;
       outer: for (const entry of plan.entries) {
         for (let copy = 1; copy <= Math.min(entry.copies, 2); copy++) {
           const labelIndex = base + copy - 1;
-          const built = buildLabel(template, { headers, record: entry.record, prompts: promptValues, recordIndex: entry.recordIndex, recordNumber: entry.recordIndex + 1, labelIndex, labelNumber: labelIndex + 1, copyNumber: copy, copies: entry.copies, serialStart });
-          shots.push({ key: entry.record.id + '-' + copy, row: entry.record.rowNumber, copy, html: (await renderPreparedLabel(template, built)).html });
+          const built = buildLabel(printTemplate, { headers, record: entry.record, prompts: promptValues, allowMissing, recordIndex: entry.recordIndex, recordNumber: entry.recordIndex + 1, labelIndex, labelNumber: labelIndex + 1, copyNumber: copy, copies: entry.copies, serialStart });
+          shots.push({ key: entry.record.id + '-' + copy, row: entry.record.rowNumber, copy, html: (await renderPreparedLabel(printTemplate, built)).html });
           if (shots.length >= 6) break outer;
         }
         base += entry.copies;
@@ -134,7 +145,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
       if (!cancelled) setPreviews(shots);
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); abort.current?.abort(); };
-  }, [template, plan, headers, promptValues, blocking.length]);
+  }, [printTemplate, plan, headers, promptValues, allowMissing, blocking.length]);
 
   const issues = check ? [...check.errors, ...check.barcodeErrors] : [];
   const canPrint = !blocking.length && plan.total > 0 && check && !issues.length && !progress;
@@ -158,7 +169,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     let pdfParts = [];
     try {
       const status = await buildChunks({
-        template: printTemplate, plan, headers, prompts: promptValues, signal: controller.signal, title: template.name,
+        template: printTemplate, plan, headers, prompts: promptValues, allowMissing, signal: controller.signal, title: template.name,
         onProgress: (done) => setProgress((p) => ({ ...p, done })),
         onChunk: async (chunk) => {
           if (mode === 'pdf') { pdfParts.push(chunk.html); return true; }
@@ -192,7 +203,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
         const warnings = outcomes.map((o) => o.warning).filter(Boolean);
         const simulated = outcomes.some((o) => o.simulatedFile);
         setResult({ kind: warnings.length ? 'warn' : 'ok', text: (simulated ? 'Simulated printer wrote ' : isDesktop ? 'Sent ' : 'Opened print for ') + plan.total.toLocaleString() + ' label(s)' + (isDesktop && !simulated ? ' to the Windows spooler for "' + (printer?.displayName || printerName || 'the selected printer') + '". Check the printed labels — Windows cannot confirm physical printing.' : '.'), warnings });
-        const state = serialStateAfter(template, plan);
+        const state = serialStateAfter(printTemplate, plan);
         if (JSON.stringify(state) !== JSON.stringify(template.serialState || {})) onSerialState?.(state);
         onPrinted?.({ jobId, total: plan.total });
       }
@@ -251,17 +262,41 @@ export default function PrintDialog({ template, connection, rows, selection, pre
         </fieldset>
         <fieldset disabled={!table}>
           <legend>Records</legend>
-          <label className="radio"><input type="radio" checked={scope === 'selected'} onChange={() => setScope('selected')} /> Selected rows ({rows.filter((r) => selection.has(r.id)).length})</label>
-          <label className="radio"><input type="radio" checked={scope === 'all'} onChange={() => setScope('all')} /> All rows after filters ({rows.length})</label>
+          <label className="radio"><input type="radio" checked={scope === 'selected'} onChange={() => setScope('selected')} /> Checked rows ({rows.filter((r) => selectedPrintIds.has(r.id)).length} of {rows.length})</label>
+          
           <label className="radio"><input type="radio" checked={scope === 'current'} onChange={() => setScope('current')} disabled={!previewId} /> Current preview row</label>
           <label className="radio"><input type="radio" checked={scope === 'range'} onChange={() => setScope('range')} /> Excel rows from</label>
           {scope === 'range' && <div className="grid-2"><NumberField label="From row" value={range.from} step={1} decimals={0} onChange={(from) => setRange((r) => ({ ...r, from }))} /><NumberField label="To row" value={range.to} step={1} decimals={0} onChange={(to) => setRange((r) => ({ ...r, to }))} /></div>}
         </fieldset>
         <fieldset>
           <legend>Copies</legend>
-          {template.data.quantityField && <Check label={'Quantity per row from column "' + template.data.quantityField + '"'} checked={useQuantity} onChange={setUseQuantity} testId="use-quantity" />}
-          {!useQuantity && <NumberField label="Copies of each label" value={copies} min={1} max={100000} step={1} decimals={0} onChange={setCopies} testId="copies" />}
+          {template.data.quantityField && <Check label={'Quantity per row from column "' + template.data.quantityField + '"'} checked={useQuantity && !missingQuantity} disabled={missingQuantity} onChange={setUseQuantity} testId="use-quantity" />}
+          {(!useQuantity || missingQuantity) && <NumberField label="Copies of each label" value={copies} min={1} max={100000} step={1} decimals={0} onChange={setCopies} testId="copies" />}
+          {missingQuantity && <p className="hint">Quantity column not found; fixed copies will be used instead.</p>}
           {plan.zeroQuantity > 0 && <p className="hint">{plan.zeroQuantity} row(s) have quantity 0 or blank and are skipped.</p>}
+        </fieldset>
+        <fieldset data-testid="print-missing-options">
+          <legend>Missing Excel columns</legend>
+          <Check label="Allow printing with missing columns (leave missing values blank)"
+            checked={allowMissing} onChange={setAllowMissing} testId="allow-missing-columns" />
+          {plan.missing.length > 0 && <div className="issues warn" data-testid="print-missing-warning">
+            <AlertTriangle size={13} /> {plan.missing.map((item) => item.field).join(', ')}:
+            {allowMissing ? ' missing values will print blank.' : ' printing blocked until you allow or map them.'}
+          </div>}
+          {!table && usesData && <p className="hint">No Excel workbook connected. Data-linked fields will print blank if allowed.</p>}
+        </fieldset>
+        <fieldset data-testid="print-object-options">
+          <legend>Design elements to print ({selectedObjectIds.size})</legend>
+          <div className="button-row">
+            <Button disabled={Boolean(progress)} onClick={() => setSelectedObjectIds(new Set(template.objects.filter((o) => !o.hidden).map((o) => o.id)))}>Select all elements</Button>
+            <Button disabled={Boolean(progress)} onClick={() => setSelectedObjectIds(new Set())}>Select none</Button>
+          </div>
+          <div className="print-element-list">{template.objects.filter((object) => !object.hidden).map((object, index) =>
+            <Check key={object.id} label={object.name || object.type + ' ' + (index + 1)} disabled={Boolean(progress)}
+              checked={selectedObjectIds.has(object.id)} onChange={(checked) => setSelectedObjectIds((prev) => {
+                const next = new Set(prev); if (checked) next.add(object.id); else next.delete(object.id); return next;
+              })} testId={'print-element-'+object.id} />)}</div>
+          <p className="hint">This changes the current print/PDF only, not the saved design.</p>
         </fieldset>
         {template.prompts.length > 0 && <fieldset><legend>Values for this print</legend>
           {template.prompts.map((p) => p.type === 'choice'
@@ -279,15 +314,27 @@ export default function PrintDialog({ template, connection, rows, selection, pre
         {issues.length > 0 && <div className="issues bad" data-testid="print-issues">{issues.slice(0, 8).map((b) => <div key={b}><XCircle size={13} /> {b}</div>)}</div>}
         {check && check.clipped.length > 0 && <div className="issues warn" data-testid="print-clipped">{check.clipped.slice(0, 5).map((b) => <div key={b}><AlertTriangle size={13} /> {b}</div>)}</div>}
         {check && !issues.length && !check.clipped.length && !blocking.length && <div className="issues ok"><CheckCircle2 size={13} /> All {check.checked.toLocaleString()} checked label(s) are valid.</div>}
-        {table && plan.entries.length > 0 && <section className="print-inline-data" data-testid="print-data-grid">
-           <div className="button-row"><b>Edit spreadsheet cells before printing</b><span className="spacer" />
-             <span className="hint">Rows {currentGridPage * 15 + 1}–{Math.min((currentGridPage + 1) * 15, plan.entries.length)} of {plan.entries.length}</span>
+        {table && rows.length > 0 && <section className="print-inline-data" data-testid="print-data-grid">
+           <div className="button-row"><b>Select print rows & edit cells</b><span className="spacer" />
+             <Button testId="print-select-all" disabled={Boolean(progress)} onClick={() => { setSelectedPrintIds(new Set(rows.map((r) => r.id))); setScope('selected'); }}>Select all rows</Button>
+             <Button testId="print-select-none" disabled={Boolean(progress)} onClick={() => { setSelectedPrintIds(new Set()); setScope('selected'); }}>Select none</Button>
+             <span className="hint">Rows {currentGridPage * 15 + 1}–{Math.min((currentGridPage + 1) * 15, rows.length)} of {rows.length}</span>
              <Button disabled={currentGridPage === 0 || Boolean(progress)} onClick={() => setGridPage((n) => Math.max(0, n - 1))}>Previous</Button>
              <Button disabled={currentGridPage >= maxGridPage || Boolean(progress)} onClick={() => setGridPage((n) => n + 1)}>Next</Button>
            </div>
-           <p className="hint">Double-click any value to edit it. Enter or click outside to save, Escape to cancel. The print preview and all copies refresh; your original Excel file does not change.</p>
-           <div className="print-data-scroll"><table className="grid"><thead><tr><th>Excel row</th>{headers.map((h,i) => <th key={i}>{h}</th>)}</tr></thead>
-             <tbody>{visiblePrintRecords.map(({record}) => <tr key={record.id}>
+           <p className="hint">All rows start selected. Uncheck rows you do not want to print. Double-click values to edit; Enter saves and Escape cancels. The Excel file is unchanged.</p>
+           <div className="print-data-scroll"><table className="grid"><thead><tr><th>Print?</th><th>Excel row</th>{headers.map((h,i) => <th key={i}>{h}</th>)}</tr></thead>
+             <tbody>{visiblePrintRecords.map((record) => <tr key={record.id}>
+               <td><input type="checkbox" aria-label={'Print row '+record.rowNumber}
+                 data-testid={'print-row-'+record.id} checked={selectedPrintIds.has(record.id)}
+                 disabled={Boolean(progress)} onChange={(e) => {
+                   setScope('selected');
+                   setSelectedPrintIds((previous) => {
+                     const next = new Set(previous);
+                     if (e.target.checked) next.add(record.id); else next.delete(record.id);
+                     return next;
+                   });
+                 }} /></td>
                <td>{record.rowNumber}</td>
                {headers.map((h,i) => <td key={i}><EditableCell value={record.cells[i]} onCommit={(value) => onEditCell?.(record.id,i,value)} testId={'print-cell-'+record.id+'-'+i} /></td>)}
              </tr>)}</tbody></table></div>
@@ -306,8 +353,8 @@ export default function PrintDialog({ template, connection, rows, selection, pre
             </figure>;
           })}
         </div>
-        {table && plan.entries.length > 6 && <SelectField label="Edit any row" value={editRowId || ''} onChange={startEditRow}
-          options={[{ value: '', label: 'Choose an Excel row…' }, ...plan.entries.map(({ record }) => ({ value: record.id, label: 'Row '+record.rowNumber }))]}
+        {table && rows.length > 6 && <SelectField label="Edit any row" value={editRowId || ''} onChange={startEditRow}
+          options={[{ value: '', label: 'Choose an Excel row…' }, ...rows.map((record) => ({ value: record.id, label: 'Row '+record.rowNumber }))]}
           testId="edit-row-picker" />}
         {editingRecord && <div className="print-row-editor" data-testid="print-row-editor">
           <div className="button-row">
@@ -329,7 +376,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
             </label>)}
           </div> : <div className="print-edit-fields">
             {editableObjects.map((object) => {
-              const sample = buildLabel(template, { headers, record: { ...editingRecord, cells: draftCells, labelOverrides: {} }, prompts: promptValues })
+              const sample = buildLabel(printTemplate, { headers, record: { ...editingRecord, cells: draftCells, labelOverrides: {} }, prompts: promptValues, allowMissing })
                 .items.find((item) => item.object.id === object.id)?.text || '';
               const overridden = Object.prototype.hasOwnProperty.call(draftOverrides, object.id);
               return <label className="field" key={object.id}>

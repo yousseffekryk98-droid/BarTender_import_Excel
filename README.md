@@ -135,3 +135,15 @@ All imported spreadsheets are parsed on-device, no account, cloud database, or i
 `npm install` sometimes shows **deprecated dependencies and security findings** from the packaging toolchain. These warnings do not mean installation failed. Use `npm audit` for the exact dependency paths; do not blindly run `npm audit fix --force` because it can break Electron/Vite. Security audits and native printer smoke tests should be performed before distributing binaries broadly.
 
 This project is MIT licensed. See [LICENSE](LICENSE).
+
+## Save designs locally and export an Excel sheet
+
+1. Click **New label**, create or modify your design, and add Excel-linked fields by using **Excel value** or the text editor's **Excel column** option. You can type column names even before connecting a workbook.
+2. Click **Save design** (or Ctrl+S), enter a name, and save. The desktop app keeps the design **locally on this computer** in its template library. You can reopen and edit it through **Open template**, save revisions, or use **Save as…** to make a separate design. No cloud connection is required.
+3. Click **Export Excel sheet**. Choose a location. The generated `.xlsx` contains a **Data** worksheet with the column headings the design requires (including any quantity, filter, and sort fields) and an **Instructions** worksheet.
+4. Fill in one row per label beginning on row 2, save the Excel file, then reopen the saved design and connect the workbook. The saved design and the Excel file are separate: modifying one does not overwrite the other.
+5. For a portable **design backup**, use File → **Export this template…** (`.elslabel`), which preserves all objects and settings. The exported Excel data sheet **does not** contain the label layout; you need both files to move the workflow to another PC.
+
+In **Print**, all imported rows are checked by default. Uncheck any row to exclude it, and use **Select all rows / Select none** to reset the selection. You can also uncheck individual **design elements** for a single print/PDF without changing the saved layout. Existing inline cell editing and the final row-label editor are still available.
+
+**Missing Excel columns:** The Print dialog offers **Allow printing with missing columns** (enabled by default). Missing field values, including expression placeholders and blank barcode data, will be blank while existing columns continue to print. If the quantity column is missing, printing falls back to fixed copies. Turn this option off to require every referenced column. The printer’s thermal **darkness/heat** is still set through the installed Windows manufacturer's printer preferences; verify its physical effect with Test print.

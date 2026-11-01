@@ -244,6 +244,21 @@ function registerIpc() {
   handle('autosave:clear', () => store.clearAutosave());
 
   // data sources
+  handle('data:export-design-excel', async (request) => {
+    const name = v.str(request?.name, 'design name', { min: 1, max: 200 })
+      .replace(/[<>:"/\\|?*\x00-\x1F]+/g, '-').slice(0, 80) || 'label-data';
+    const bytes = request?.bytes;
+    if (!(bytes instanceof Uint8Array) || bytes.length < 100 || bytes.length > 5 * 1024 * 1024 ||
+      bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error('Invalid Excel workbook data.');
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Excel data-entry sheet for this design',
+      defaultPath: name + '-data.xlsx',
+      filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }]
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    await fs.writeFile(result.filePath, bytes);
+    return { path: result.filePath, bytes: bytes.length };
+  });
   handle('data:open-dialog', async () => {
     const result = await dialog.showOpenDialog(mainWindow, { title: 'Open Excel or CSV data', properties: ['openFile'], filters: [{ name: 'Spreadsheets', extensions: ['xlsx', 'xlsm', 'xls', 'csv', 'tsv', 'txt'] }, { name: 'All files', extensions: ['*'] }] });
     if (result.canceled || !result.filePaths[0]) return { canceled: true };

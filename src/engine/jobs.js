@@ -10,11 +10,14 @@ export const CONFIRM_LABELS_ABOVE = 1_000;
 export const SPOOL_CHUNK = 250;
 
 export function applyFilters(records, headers, filters = []) {
-  const active = (filters || []).filter((f) => f && f.field);
+  const active = (filters || []).filter((f) => f && f.field)
+    .map((filter) => ({ filter, index: resolveColumn(headers, filter.field) }))
+    .filter(({ index }) => index >= 0);
+  // Unavailable source columns must not silently filter out every row.
+  // The print planner reports the missing binding, and Print can allow blanks.
   if (!active.length) return records;
-  const indexes = active.map((f) => resolveColumn(headers, f.field));
-  return records.filter((record) => active.every((filter, i) =>
-    matchesOperator(indexes[i] < 0 ? '' : record.cells[indexes[i]], filter.op, filter.value)));
+  return records.filter((record) => active.every(({ filter, index }) =>
+    matchesOperator(record.cells[index], filter.op, filter.value)));
 }
 
 export function sortRecords(records, headers, sort = []) {

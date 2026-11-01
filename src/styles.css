@@ -343,3 +343,9 @@ legend { padding: 0 4px; font-weight: 600; color: var(--muted); }
 .print-data-scroll .grid { width: max-content; min-width: 100%; }
 .print-data-scroll .grid th { position: sticky; top: 0; z-index: 1; background: var(--surface, #fff); }
 .printer-density-settings { margin-top: 8px; }
+
+/* Per-print element selectors and row checkboxes. */
+.print-element-list { display: flex; flex-direction: column; gap: 3px; max-height: 190px; overflow: auto; padding: 6px 2px; }
+.print-element-list .check { min-height: 25px; }
+.print-data-scroll .grid td:first-child, .print-data-scroll .grid th:first-child { min-width: 55px; text-align: center; }
+.print-data-scroll .grid td:first-child input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent, #176b69); }
