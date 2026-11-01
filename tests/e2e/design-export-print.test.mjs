@@ -11,7 +11,7 @@ test('save a design locally, export matching Excel workbook, and unselect a prin
   const s = await launch({ dataDir: path.join(work,'data'), printDir: path.join(work,'printed') });
   try {
     const src = path.join(work,'data-source.xlsx');
-    await writeWorkbook(src, [['Products', [['Product Name','Price'],['Mouse','125'],['Keyboard','150']]]]);
+    await writeWorkbook(src, [['Products', [['Product Name','Price','SKU'],['Mouse','125','SKU-M'],['Keyboard','150','SKU-K']]]]);
     await connectData(s.app,s.page,src);
     await saveAs(s.page,'Local Shop Label');
     const saved = await s.page.evaluate(async () => {
@@ -26,7 +26,7 @@ test('save a design locally, export matching Excel workbook, and unselect a prin
     await s.page.waitForFunction(() => document.querySelector('.notices')?.textContent?.includes('Excel starter exported'));
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(exportPath);
-    assert.deepEqual(wb.getWorksheet('Data').getRow(1).values.slice(1), ['Product Name','Price']);
+    assert.deepEqual(wb.getWorksheet('Data').getRow(1).values.slice(1), ['Product Name','Price','SKU']);
     assert.ok(wb.getWorksheet('Instructions'));
     await s.page.click('[data-testid="tb-print"]');
     await s.page.waitForSelector('[data-testid="print-dialog"]');
