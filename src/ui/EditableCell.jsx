@@ -24,7 +24,8 @@ export default function EditableCell({ value, onCommit, testId }) {
       if (e.key === 'Escape') { e.preventDefault(); cancel.current = true; input.current?.blur(); }
     }} />;
   return <button type="button" className="cell-edit-trigger" title="Double-click to edit this cell"
-    data-testid={testId} onClick={(e) => e.stopPropagation()}
+    data-testid={testId}
+    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); e.stopPropagation(); setDraft(String(value ?? '')); setEditing(true); } }}
     onDoubleClick={(e) => { e.stopPropagation(); setDraft(String(value ?? '')); setEditing(true); }}>
     {String(value ?? '') || '\u00a0'}
   </button>;
