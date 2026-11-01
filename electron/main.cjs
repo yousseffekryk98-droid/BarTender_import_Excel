@@ -247,9 +247,15 @@ function registerIpc() {
   handle('data:export-design-excel', async (request) => {
     const name = v.str(request?.name, 'design name', { min: 1, max: 200 })
       .replace(/[<>:"/\\|?*\x00-\x1F]+/g, '-').slice(0, 80) || 'label-data';
-    const bytes = request?.bytes;
-    if (!(bytes instanceof Uint8Array) || bytes.length < 100 || bytes.length > 5 * 1024 * 1024 ||
-      bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error('Invalid Excel workbook data.');
+    // Use a regular Array across Electron contextBridge; typed arrays are not
+    // guaranteed to survive the isolated-world proxy unchanged.
+    const serialized = request?.bytes;
+    if (!Array.isArray(serialized) || serialized.length < 100 || serialized.length > 5 * 1024 * 1024 ||
+      serialized.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) {
+      throw new Error('Invalid Excel workbook data.');
+    }
+    const bytes = Buffer.from(serialized);
+    if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error('Invalid Excel workbook data.');
     const result = await dialog.showSaveDialog(mainWindow, {
       title: 'Export Excel data-entry sheet for this design',
       defaultPath: name + '-data.xlsx',

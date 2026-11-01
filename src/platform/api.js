@@ -144,7 +144,7 @@ const browserBridge = {
   },
   data: {
     async exportDesignExcel(name, bytes) {
-      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const blob = new Blob([Uint8Array.from(bytes)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       const safeName = String(name || 'label-data').replace(/[^a-z0-9 _-]+/gi, '-').slice(0, 80) || 'label-data';

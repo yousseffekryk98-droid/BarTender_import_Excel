@@ -9,6 +9,7 @@ import { desktop, isDesktop } from '../platform/api.js';
 import { printerConnectionMessage } from '../platform/printer-connection.js';
 import { LABEL_CSS } from '../engine/render.js';
 import EditableCell from './EditableCell.jsx';
+import { selectPrintableRecords } from '../engine/print-selection.js';
 
 function PrinterLine({ printer }) {
   if (!printer) return null;
@@ -82,10 +83,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
 
   const records = useMemo(() => {
     if (!table) return [{ id: '1', rowNumber: 1, cells: [], raw: [] }];
-    if (scope === 'selected') return rows.filter((r) => selectedPrintIds.has(r.id));
-    if (scope === 'current') return rows.filter((r) => r.id === previewId).slice(0, 1);
-    if (scope === 'range') return rows.filter((r) => r.rowNumber >= range.from && r.rowNumber <= range.to);
-    return rows;
+    return selectPrintableRecords(rows, selectedPrintIds, scope, previewId, range);
   }, [table, scope, rows, selectedPrintIds, previewId, range]);
 
   const printTemplate = useMemo(() => ({
@@ -322,7 +320,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
              <Button disabled={currentGridPage === 0 || Boolean(progress)} onClick={() => setGridPage((n) => Math.max(0, n - 1))}>Previous</Button>
              <Button disabled={currentGridPage >= maxGridPage || Boolean(progress)} onClick={() => setGridPage((n) => n + 1)}>Next</Button>
            </div>
-           <p className="hint">All rows start selected. Uncheck rows you do not want to print. Double-click values to edit; Enter saves and Escape cancels. The Excel file is unchanged.</p>
+           <p className="hint">All rows start selected. Uncheck any row to exclude it, even when printing the current row or a range. Double-click values to edit; Enter saves and Escape cancels. The Excel file is unchanged.</p>
            <div className="print-data-scroll"><table className="grid"><thead><tr><th>Print?</th><th>Excel row</th>{headers.map((h,i) => <th key={i}>{h}</th>)}</tr></thead>
              <tbody>{visiblePrintRecords.map((record) => <tr key={record.id}>
                <td><input type="checkbox" aria-label={'Print row '+record.rowNumber}
