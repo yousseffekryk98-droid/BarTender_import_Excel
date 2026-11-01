@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('labelDesktop', {
   images: { openDialog: () => call('image:open-dialog') },
   print: {
     printers: (refresh) => call('print:printers', refresh),
+    preferences: (printerName) => call('print:preferences', printerName),
     job: (request) => call('print:job', request),
     cancelled: (jobId) => call('print:cancelled', jobId),
     pdfDialog: (request) => call('print:pdf-dialog', request),

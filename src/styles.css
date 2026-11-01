@@ -332,3 +332,14 @@ legend { padding: 0 4px; font-weight: 600; color: var(--muted); }
 .notice-text { flex: 1; }
 .notice button { border: 0; background: none; padding: 2px; }
 .fatal { padding: 40px; font-family: var(--font); }
+
+/* Working-copy data editors shared by the data grid and pre-print review. */
+.cell-edit-trigger { display: block; width: 100%; min-width: 60px; padding: 2px 5px; text-align: start; background: transparent; border: 0; color: inherit; font: inherit; cursor: text; white-space: nowrap; }
+.cell-edit-trigger:hover { outline: 1px dashed var(--accent, #777); }
+.cell-inline-input { display: block; width: 100%; min-width: 65px; box-sizing: border-box; padding: 2px 5px; font: inherit; color: inherit; background: var(--surface, #fff); border: 1px solid var(--accent, #2276a8); }
+.print-inline-data { margin: 12px 0; }
+.print-inline-data .button-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.print-data-scroll { width: 100%; max-height: 225px; overflow: auto; border: 1px solid var(--border, #ddd); border-radius: 4px; margin-top: 6px; }
+.print-data-scroll .grid { width: max-content; min-width: 100%; }
+.print-data-scroll .grid th { position: sticky; top: 0; z-index: 1; background: var(--surface, #fff); }
+.printer-density-settings { margin-top: 8px; }

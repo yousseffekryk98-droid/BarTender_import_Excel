@@ -1,5 +1,7 @@
 // Re-map template column bindings, e.g. when a new workbook calls "Product" "Item Name".
 import { headerKey } from './binding.js';
+import { objectFieldNames } from './schema.js';
+import { referencedFields, templateFields } from './expression.js';
 
 function replaceInTemplateText(text, from, to) {
   const key = headerKey(from);
@@ -44,4 +46,69 @@ export function renameField(template, from, to) {
 
 export function applyRenames(template, renames) {
   return Object.entries(renames || {}).reduce((t, [from, to]) => (to ? renameField(t, from, to) : t), template);
+}
+
+
+// Deleting a working-copy column must detach ALL references in the template,
+// otherwise print planning rejects the job with "Column ... was not found".
+function referencesDeleted(expression, key) {
+  try { return referencedFields(expression || '').some((name) => headerKey(name) === key); }
+  catch { return false; } // Preserve invalid expressions so existing validation can report them.
+}
+
+function detachContent(content, key) {
+  if (!content) return content;
+  if (content.mode === 'field' && headerKey(content.field) === key) {
+    return { ...content, mode: 'static', text: '', field: '' };
+  }
+  if (content.mode === 'expression' && referencesDeleted(content.expression, key)) {
+    return { ...content, mode: 'static', text: '', expression: '' };
+  }
+  if (content.mode !== 'template') return content;
+  const rewritten = String(content.template || '').replace(/(?<!\{)\{([^{}]+)\}(?!\})/g, (match, body) => {
+    const name = body.trim();
+    if (name.startsWith('=')) return referencesDeleted(name.slice(1), key) ? '' : match;
+    return headerKey(name) === key ? '' : match;
+  });
+  return rewritten === content.template ? content : { ...content, template: rewritten };
+}
+
+/** Remove every dependency on a column excluded from the working import. */
+export function detachDeletedField(template, field) {
+  const key = headerKey(field);
+  if (!key) return template;
+  return {
+    ...template,
+    objects: template.objects.map((object) => {
+      const next = { ...object };
+      if (object.content) {
+        next.content = detachContent(object.content, key);
+        if (object.content.mode === 'field' && next.content.mode === 'static' && next.content !== object.content) {
+          next.prefix = ''; next.suffix = '';
+        }
+      }
+      if (object.type === 'table') {
+        next.cells = object.cells.map((row) => row.map((cell) => ({ ...cell, content: detachContent(cell.content, key) })));
+      }
+      const rule = object.visibleIf;
+      if (rule?.kind === 'field' && headerKey(rule.field) === key ||
+          rule?.kind === 'expression' && referencesDeleted(rule.expression, key)) next.visibleIf = null;
+      return next;
+    }),
+    data: {
+      ...template.data,
+      quantityField: headerKey(template.data.quantityField) === key ? '' : template.data.quantityField,
+      quantityMode: headerKey(template.data.quantityField) === key ? 'fixed' : template.data.quantityMode,
+      filters: template.data.filters.filter((item) => headerKey(item.field) !== key),
+      sort: template.data.sort.filter((item) => headerKey(item.field) !== key)
+    }
+  };
+}
+
+/** IDs of label objects whose per-row overrides become stale when a column is deleted. */
+export function objectsUsingField(template, field) {
+  const key = headerKey(field);
+  return (template.objects || [])
+    .filter((object) => objectFieldNames(object, { templateFields, referencedFields }).some((name) => headerKey(name) === key))
+    .map((object) => object.id);
 }

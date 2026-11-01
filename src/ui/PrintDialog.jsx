@@ -8,6 +8,7 @@ import { validateJob, buildChunks, renderPreparedLabel, paperSize } from '../ren
 import { desktop, isDesktop } from '../platform/api.js';
 import { printerConnectionMessage } from '../platform/printer-connection.js';
 import { LABEL_CSS } from '../engine/render.js';
+import EditableCell from './EditableCell.jsx';
 
 function PrinterLine({ printer }) {
   if (!printer) return null;
@@ -18,7 +19,7 @@ function PrinterLine({ printer }) {
   </div>;
 }
 
-export default function PrintDialog({ template, connection, rows, selection, previewId, printers, onRefreshPrinters, onConnectPrinter, onClose, onPrinted, onSerialState, defaultPrinter, onEditRow, onEditLayout }) {
+export default function PrintDialog({ template, connection, rows, selection, previewId, printers, onRefreshPrinters, onConnectPrinter, onClose, onPrinted, onSerialState, defaultPrinter, onEditRow, onEditCell, onEditLayout }) {
   const ask = useDialog();
   const table = connection?.table;
   const headers = table?.headers || [];
@@ -42,6 +43,8 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   const [draftCells, setDraftCells] = useState([]);
   const [draftOverrides, setDraftOverrides] = useState({});
   const [editTab, setEditTab] = useState('cells');
+  const [gridPage, setGridPage] = useState(0);
+  const [openingPreferences, setOpeningPreferences] = useState(false);
   const abort = useRef(null);
   const printer = printers.find((p) => p.name === printerName);
   useEffect(() => {
@@ -56,6 +59,16 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     try { setPrinterFeedback(printerConnectionMessage(await onConnectPrinter(printerName))); }
     catch (error) { setPrinterFeedback({ kind: 'bad', text: error.message || 'Printer check failed.' }); }
     finally { setConnecting(false); }
+  }
+  async function openDarknessSettings() {
+    setPrinterFeedback(null);
+    setOpeningPreferences(true);
+    try {
+      await desktop.print.preferences(printerName);
+      setPrinterFeedback({ kind: 'ok', text: 'Windows Printing Preferences requested. Set Darkness / Density / Heat if the driver shows it, click Apply or OK, then use Test print. If no window appears, check the manufacturer driver.' });
+    } catch (error) {
+      setPrinterFeedback({ kind: 'bad', text: error.message || 'Could not open printer preferences.' });
+    } finally { setOpeningPreferences(false); }
   }
   async function refreshPrinterList() {
     setPrinterFeedback(null);
@@ -78,6 +91,9 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   }), [template, headers, records, copies, useQuantity]);
 
   const editingRecord = plan.entries.find((entry) => entry.record.id === editRowId)?.record;
+  const maxGridPage = Math.max(0, Math.ceil(plan.entries.length / 15) - 1);
+  const currentGridPage = Math.min(gridPage, maxGridPage);
+  const visiblePrintRecords = plan.entries.slice(currentGridPage * 15, (currentGridPage + 1) * 15);
   const editableObjects = template.objects.filter((object) => object.type === 'text' && !object.hidden);
   function startEditRow(id) {
     const record = plan.entries.find((entry) => entry.record.id === id)?.record;
@@ -216,6 +232,13 @@ export default function PrintDialog({ template, connection, rows, selection, pre
           {printerFeedback && <div className={'printer-status ' + printerFeedback.kind} role="status" data-testid="printer-connect-status">{printerFeedback.text}</div>}
           {!printers.length && <p className="hint" data-testid="printer-help">No printers found. Add your printer in Windows Settings → Bluetooth & devices → Printers & scanners and click Refresh.</p>}
           <p className="hint">Connect checks Windows printer availability and saves the selection. Use Test print to verify the physical printer.</p>
+           <fieldset className="printer-density-settings">
+             <legend>Print darkness / heat</legend>
+             <Button onClick={openDarknessSettings} disabled={!printerName || !printer || Boolean(printer?.simulated) || openingPreferences || Boolean(progress)} testId="printer-darkness-settings">
+               {openingPreferences ? 'Opening printer settings…' : 'Adjust printer darkness / heat…'}
+             </Button>
+             <p className="hint">Opens this printer's Windows driver settings. Look for Darkness, Density, Heat, or Print Speed; increase gradually and click Apply / OK. Not all printer drivers expose these controls. Settings affect physical printing, not PDFs.</p>
+           </fieldset>
           {printer?.blocking && <Check label="Print anyway (ignore printer status)" checked={ignoreStatus} onChange={setIgnoreStatus} />}
           <Check label="Show the Windows print dialog" checked={showDialog} onChange={setShowDialog} />
         </>}
@@ -256,7 +279,20 @@ export default function PrintDialog({ template, connection, rows, selection, pre
         {issues.length > 0 && <div className="issues bad" data-testid="print-issues">{issues.slice(0, 8).map((b) => <div key={b}><XCircle size={13} /> {b}</div>)}</div>}
         {check && check.clipped.length > 0 && <div className="issues warn" data-testid="print-clipped">{check.clipped.slice(0, 5).map((b) => <div key={b}><AlertTriangle size={13} /> {b}</div>)}</div>}
         {check && !issues.length && !check.clipped.length && !blocking.length && <div className="issues ok"><CheckCircle2 size={13} /> All {check.checked.toLocaleString()} checked label(s) are valid.</div>}
-        <div className="preview-strip" data-testid="print-previews">
+        {table && plan.entries.length > 0 && <section className="print-inline-data" data-testid="print-data-grid">
+           <div className="button-row"><b>Edit spreadsheet cells before printing</b><span className="spacer" />
+             <span className="hint">Rows {currentGridPage * 15 + 1}–{Math.min((currentGridPage + 1) * 15, plan.entries.length)} of {plan.entries.length}</span>
+             <Button disabled={currentGridPage === 0 || Boolean(progress)} onClick={() => setGridPage((n) => Math.max(0, n - 1))}>Previous</Button>
+             <Button disabled={currentGridPage >= maxGridPage || Boolean(progress)} onClick={() => setGridPage((n) => n + 1)}>Next</Button>
+           </div>
+           <p className="hint">Double-click any value to edit it. Enter or click outside to save, Escape to cancel. The print preview and all copies refresh; your original Excel file does not change.</p>
+           <div className="print-data-scroll"><table className="grid"><thead><tr><th>Excel row</th>{headers.map((h,i) => <th key={i}>{h}</th>)}</tr></thead>
+             <tbody>{visiblePrintRecords.map(({record}) => <tr key={record.id}>
+               <td>{record.rowNumber}</td>
+               {headers.map((h,i) => <td key={i}><EditableCell value={record.cells[i]} onCommit={(value) => onEditCell?.(record.id,i,value)} testId={'print-cell-'+record.id+'-'+i} /></td>)}
+             </tr>)}</tbody></table></div>
+         </section>}
+         <div className="preview-strip" data-testid="print-previews">
           <style>{LABEL_CSS}</style>
           {previews.map((p) => {
             const zoom = Math.min(1.6, 200 / (template.page.width * 3.78));

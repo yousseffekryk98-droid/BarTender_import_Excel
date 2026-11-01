@@ -162,6 +162,7 @@ const browserBridge = {
   },
   print: {
     async printers() { return []; },
+    async preferences() { throw new Error('Printer heat / darkness settings require the Windows desktop app.'); },
     async job(request) {
       const frame = document.createElement('iframe');
       frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0';

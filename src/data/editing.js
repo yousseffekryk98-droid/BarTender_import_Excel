@@ -20,3 +20,21 @@ export function editWorkingRow(table, rowId, cells, labelOverrides = {}) {
     .map(([id, value]) => [id, value.slice(0, 5000)]));
   return { ...table, records: table.records.map((r, i) => i === index ? { ...r, cells: values, raw, labelOverrides: overrides } : r) };
 }
+
+/** Change exactly one imported cell, clearing stale typed Excel data but retaining label overrides. */
+export function editWorkingCell(table, rowId, columnIndex, value) {
+  if (!Number.isInteger(columnIndex) || columnIndex < 0 || columnIndex >= table.headers.length) throw new Error('Invalid Excel column.');
+  const index = table.records.findIndex((r) => String(r.id) === String(rowId));
+  if (index < 0) throw new Error('Row no longer exists.');
+  const original = table.records[index];
+  const text = String(value ?? '');
+  if (original.cells[columnIndex] === text) return table;
+  return {
+    ...table,
+    records: table.records.map((row, i) => i === index ? {
+      ...row,
+      cells: row.cells.map((cell, j) => j === columnIndex ? text : cell),
+      raw: row.raw.map((raw, j) => j === columnIndex ? null : raw)
+    } : row)
+  };
+}

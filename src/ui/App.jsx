@@ -23,9 +23,9 @@ import { createObject, newId, sanitizeTemplate, SAFE_FONTS } from '../engine/sch
 import { templateFromStarter } from '../engine/starters.js';
 import { applyFilters, sortRecords, searchRecords } from '../engine/jobs.js';
 import { templateFieldNames, missingFields } from '../engine/binding.js';
-import { applyRenames } from '../engine/remap.js';
+import { applyRenames, detachDeletedField, objectsUsingField } from '../engine/remap.js';
 import { readSpreadsheet, withHeaderRow } from '../data/importers.js';
-import { removeWorkingRows, removeWorkingColumn, editWorkingRow } from '../data/editing.js';
+import { removeWorkingRows, removeWorkingColumn, editWorkingRow, editWorkingCell } from '../data/editing.js';
 import { handleAutomationRender } from '../render/automation.js';
 import { desktop, isDesktop } from '../platform/api.js';
 import { connectWindowsPrinter } from '../platform/printer-connection.js';
@@ -238,10 +238,22 @@ export default function App() {
     const table = connection?.table;
     if (!table?.headers[index]) return;
     const name = table.headers[index];
-    const ok = await ask({ title: 'Remove Excel column', message: 'Exclude "' + name + '" from this imported copy? Linked label objects may require remapping or switching to fixed text. The original Excel file stays unchanged.', confirmLabel: 'Remove column', danger: true });
+    const ok = await ask({ title: 'Remove Excel column', message: 'Exclude "' + name + '" from this imported copy? References in this label template will be cleared automatically (including quantity, filters, and formulas). The original Excel file stays unchanged.', confirmLabel: 'Remove column', danger: true });
     if (!ok) return;
-    editTable((t) => removeWorkingColumn(t, index));
-    notify('Removed column "' + name + '". Any linked label text may need updating.', 'warn');
+    const affected = new Set(objectsUsingField(template, name));
+    editTable((t) => {
+      const edited = removeWorkingColumn(t, index);
+      if (!affected.size) return edited;
+      return { ...edited, records: edited.records.map((record) => ({
+        ...record,
+        labelOverrides: Object.fromEntries(Object.entries(record.labelOverrides || {}).filter(([id]) => !affected.has(id)))
+      })) };
+    });
+    doc.update((t) => detachDeletedField(t, name));
+    notify('Removed column "' + name + '" and cleared its label bindings. Excel file unchanged.', 'warn');
+  }
+  function editCell(rowId, columnIndex, value) {
+    editTable((t) => editWorkingCell(t, rowId, columnIndex, value));
   }
   function editRow(rowId, cells, overrides) {
     try { editTable((t) => editWorkingRow(t, rowId, cells, overrides)); }
@@ -705,7 +717,7 @@ export default function App() {
       <DataPanel connection={connection} template={template} onChange={(fn) => doc.update(fn)} rows={rows} totalRows={processed.length} selection={rowSelection}
         onSelection={changeSelection} previewId={previewRecord?.id} onPreview={setPreviewId} query={query} onQuery={setQuery}
         onOpenData={openWizard} onReload={reloadData} onSheet={chooseSheet} onHeaderRow={chooseHeaderRow} onShowWarnings={() => setDialog('warnings')}
-        onDeleteRows={deleteRows} onDeleteColumn={deleteColumn} onDisconnect={disconnectExcel} />
+        onDeleteRows={deleteRows} onDeleteColumn={deleteColumn} onEditCell={editCell} onDisconnect={disconnectExcel} />
     </section>
     <footer className="statusbar" data-testid="statusbar">
       <span>{template.page.width} × {template.page.height} mm</span>
@@ -722,7 +734,7 @@ export default function App() {
 
     {dialog === 'print' && <PrintDialog template={template} connection={connection} rows={processed} selection={rowSelection} previewId={previewRecord?.id} printers={printers}
       onRefreshPrinters={() => refreshPrinters(true)} onConnectPrinter={connectPrinter} onClose={() => setDialog(null)} onSerialState={saveSerialState}
-      onEditRow={editRow} onEditLayout={(id) => { setPreviewId(id); setDialog(null); }} defaultPrinter={settings.defaultPrinter}
+      onEditRow={editRow} onEditCell={editCell} onEditLayout={(id) => { setPreviewId(id); setDialog(null); }} defaultPrinter={settings.defaultPrinter}
       onPrinted={() => { if (template.page.printerName === '' && doc.storedId) { /* keep */ } }} />}
     {dialog === 'printer' && <PrinterConnectionDialog printers={printers} defaultPrinter={settings.defaultPrinter || ''} onRefreshPrinters={() => refreshPrinters(true)} onConnectPrinter={connectPrinter} onClose={() => setDialog(null)} />}
     {editingText && <TextEditorDialog key={editingText.id} object={editingText} fields={fieldChoices} headers={headers}

@@ -5,6 +5,7 @@ import { FILTER_OPERATORS } from '../engine/schema.js';
 import { OPERATOR_LABELS } from './PropertiesPanel.jsx';
 import { resolveColumn, headerKey } from '../engine/binding.js';
 import { parseQuantity } from '../engine/jobs.js';
+import EditableCell from './EditableCell.jsx';
 
 const ROW_H = 24;
 
@@ -29,7 +30,7 @@ function FilterBar({ template, headers, onChange }) {
 
 export default function DataPanel({
   connection, template, onChange, rows, totalRows, selection, onSelection, previewId, onPreview, query, onQuery,
-  onOpenData, onReload, onSheet, onHeaderRow, onShowWarnings, onDeleteRows, onDeleteColumn, onDisconnect
+  onOpenData, onReload, onSheet, onHeaderRow, onShowWarnings, onDeleteRows, onDeleteColumn, onEditCell, onDisconnect
 }) {
   const scrollRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -122,7 +123,7 @@ export default function DataPanel({
               <td className="rownum">{r.rowNumber}{r.hidden && <EyeOff size={11} />}</td>
               <td className="row-action"><button type="button" className="mini" title={'Remove row '+r.rowNumber} aria-label={'Remove row '+r.rowNumber}
                 data-testid={'remove-row-'+r.id} onClick={(e) => { e.stopPropagation(); onDeleteRows([r.id]); }}><Trash2 size={12}/></button></td>
-              {headers.map((h, i) => <td key={i} dir="auto" className={(i === qIndex ? 'qty-col' : '') + (i === qIndex && q?.problem ? ' bad' : '')} title={i === qIndex && q?.problem ? q.problem : r.cells[i]}>{r.cells[i]}</td>)}
+              {headers.map((h, i) => <td key={i} dir="auto" className={(i === qIndex ? 'qty-col' : '') + (i === qIndex && q?.problem ? ' bad' : '')} title={i === qIndex && q?.problem ? q.problem : r.cells[i]}><EditableCell value={r.cells[i]} onCommit={(value) => onEditCell(r.id, i, value)} testId={'data-cell-'+r.id+'-'+i} /></td>)}
             </tr>;
           })}
           {end < rows.length && <tr style={{ height: (rows.length - end) * ROW_H }}><td colSpan={headers.length + 3} /></tr>}
@@ -130,7 +131,7 @@ export default function DataPanel({
       </table>
       {!rows.length && <div className="empty-row">No rows match the search/filters.</div>}
     </div>
-    <div className="sort-note">Removing rows/columns only changes this import, not the Excel file. Reloading, changing the header row or reconnecting restores them. Removing a mapped column requires updating that label field.</div>
+    <div className="sort-note">Removing rows/columns only changes this import, not the Excel file. Reloading, changing the header row or reconnecting restores them. Double-click any cell to edit it here. Removing a column clears its template bindings automatically.</div>
     {sort && <div className="sort-note">Sorted by {sort.field} ({sort.dir === 'asc' ? 'A→Z' : 'Z→A'}) — labels print in this order.</div>}
   </div>;
 }
