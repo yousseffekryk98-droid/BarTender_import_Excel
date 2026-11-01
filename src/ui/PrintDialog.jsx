@@ -262,17 +262,41 @@ export default function PrintDialog({ template, connection, rows, selection, pre
         </fieldset>
         <fieldset disabled={!table}>
           <legend>Records</legend>
-          <label className="radio"><input type="radio" checked={scope === 'selected'} onChange={() => setScope('selected')} /> Selected rows ({rows.filter((r) => selection.has(r.id)).length})</label>
-          <label className="radio"><input type="radio" checked={scope === 'all'} onChange={() => setScope('all')} /> All rows after filters ({rows.length})</label>
+          <label className="radio"><input type="radio" checked={scope === 'selected'} onChange={() => setScope('selected')} /> Checked rows ({rows.filter((r) => selectedPrintIds.has(r.id)).length} of {rows.length})</label>
+          
           <label className="radio"><input type="radio" checked={scope === 'current'} onChange={() => setScope('current')} disabled={!previewId} /> Current preview row</label>
           <label className="radio"><input type="radio" checked={scope === 'range'} onChange={() => setScope('range')} /> Excel rows from</label>
           {scope === 'range' && <div className="grid-2"><NumberField label="From row" value={range.from} step={1} decimals={0} onChange={(from) => setRange((r) => ({ ...r, from }))} /><NumberField label="To row" value={range.to} step={1} decimals={0} onChange={(to) => setRange((r) => ({ ...r, to }))} /></div>}
         </fieldset>
         <fieldset>
           <legend>Copies</legend>
-          {template.data.quantityField && <Check label={'Quantity per row from column "' + template.data.quantityField + '"'} checked={useQuantity} onChange={setUseQuantity} testId="use-quantity" />}
-          {!useQuantity && <NumberField label="Copies of each label" value={copies} min={1} max={100000} step={1} decimals={0} onChange={setCopies} testId="copies" />}
+          {template.data.quantityField && <Check label={'Quantity per row from column "' + template.data.quantityField + '"'} checked={useQuantity && !missingQuantity} disabled={missingQuantity} onChange={setUseQuantity} testId="use-quantity" />}
+          {(!useQuantity || missingQuantity) && <NumberField label="Copies of each label" value={copies} min={1} max={100000} step={1} decimals={0} onChange={setCopies} testId="copies" />}
+          {missingQuantity && <p className="hint">Quantity column not found; fixed copies will be used instead.</p>}
           {plan.zeroQuantity > 0 && <p className="hint">{plan.zeroQuantity} row(s) have quantity 0 or blank and are skipped.</p>}
+        </fieldset>
+        <fieldset data-testid="print-missing-options">
+          <legend>Missing Excel columns</legend>
+          <Check label="Allow printing with missing columns (leave missing values blank)"
+            checked={allowMissing} onChange={setAllowMissing} testId="allow-missing-columns" />
+          {plan.missing.length > 0 && <div className="issues warn" data-testid="print-missing-warning">
+            <AlertTriangle size={13} /> {plan.missing.map((item) => item.field).join(', ')}:
+            {allowMissing ? ' missing values will print blank.' : ' printing blocked until you allow or map them.'}
+          </div>}
+          {!table && usesData && <p className="hint">No Excel workbook connected. Data-linked fields will print blank if allowed.</p>}
+        </fieldset>
+        <fieldset data-testid="print-object-options">
+          <legend>Design elements to print ({selectedObjectIds.size})</legend>
+          <div className="button-row">
+            <Button disabled={Boolean(progress)} onClick={() => setSelectedObjectIds(new Set(template.objects.filter((o) => !o.hidden).map((o) => o.id)))}>Select all elements</Button>
+            <Button disabled={Boolean(progress)} onClick={() => setSelectedObjectIds(new Set())}>Select none</Button>
+          </div>
+          <div className="print-element-list">{template.objects.filter((object) => !object.hidden).map((object, index) =>
+            <Check key={object.id} label={object.name || object.type + ' ' + (index + 1)} disabled={Boolean(progress)}
+              checked={selectedObjectIds.has(object.id)} onChange={(checked) => setSelectedObjectIds((prev) => {
+                const next = new Set(prev); if (checked) next.add(object.id); else next.delete(object.id); return next;
+              })} testId={'print-element-'+object.id} />)}</div>
+          <p className="hint">This changes the current print/PDF only, not the saved design.</p>
         </fieldset>
         {template.prompts.length > 0 && <fieldset><legend>Values for this print</legend>
           {template.prompts.map((p) => p.type === 'choice'
@@ -290,15 +314,27 @@ export default function PrintDialog({ template, connection, rows, selection, pre
         {issues.length > 0 && <div className="issues bad" data-testid="print-issues">{issues.slice(0, 8).map((b) => <div key={b}><XCircle size={13} /> {b}</div>)}</div>}
         {check && check.clipped.length > 0 && <div className="issues warn" data-testid="print-clipped">{check.clipped.slice(0, 5).map((b) => <div key={b}><AlertTriangle size={13} /> {b}</div>)}</div>}
         {check && !issues.length && !check.clipped.length && !blocking.length && <div className="issues ok"><CheckCircle2 size={13} /> All {check.checked.toLocaleString()} checked label(s) are valid.</div>}
-        {table && plan.entries.length > 0 && <section className="print-inline-data" data-testid="print-data-grid">
-           <div className="button-row"><b>Edit spreadsheet cells before printing</b><span className="spacer" />
-             <span className="hint">Rows {currentGridPage * 15 + 1}–{Math.min((currentGridPage + 1) * 15, plan.entries.length)} of {plan.entries.length}</span>
+        {table && rows.length > 0 && <section className="print-inline-data" data-testid="print-data-grid">
+           <div className="button-row"><b>Select print rows & edit cells</b><span className="spacer" />
+             <Button testId="print-select-all" disabled={Boolean(progress)} onClick={() => { setSelectedPrintIds(new Set(rows.map((r) => r.id))); setScope('selected'); }}>Select all rows</Button>
+             <Button testId="print-select-none" disabled={Boolean(progress)} onClick={() => { setSelectedPrintIds(new Set()); setScope('selected'); }}>Select none</Button>
+             <span className="hint">Rows {currentGridPage * 15 + 1}–{Math.min((currentGridPage + 1) * 15, rows.length)} of {rows.length}</span>
              <Button disabled={currentGridPage === 0 || Boolean(progress)} onClick={() => setGridPage((n) => Math.max(0, n - 1))}>Previous</Button>
              <Button disabled={currentGridPage >= maxGridPage || Boolean(progress)} onClick={() => setGridPage((n) => n + 1)}>Next</Button>
            </div>
-           <p className="hint">Double-click any value to edit it. Enter or click outside to save, Escape to cancel. The print preview and all copies refresh; your original Excel file does not change.</p>
-           <div className="print-data-scroll"><table className="grid"><thead><tr><th>Excel row</th>{headers.map((h,i) => <th key={i}>{h}</th>)}</tr></thead>
-             <tbody>{visiblePrintRecords.map(({record}) => <tr key={record.id}>
+           <p className="hint">All rows start selected. Uncheck rows you do not want to print. Double-click values to edit; Enter saves and Escape cancels. The Excel file is unchanged.</p>
+           <div className="print-data-scroll"><table className="grid"><thead><tr><th>Print?</th><th>Excel row</th>{headers.map((h,i) => <th key={i}>{h}</th>)}</tr></thead>
+             <tbody>{visiblePrintRecords.map((record) => <tr key={record.id}>
+               <td><input type="checkbox" aria-label={'Print row '+record.rowNumber}
+                 data-testid={'print-row-'+record.id} checked={selectedPrintIds.has(record.id)}
+                 disabled={Boolean(progress)} onChange={(e) => {
+                   setScope('selected');
+                   setSelectedPrintIds((previous) => {
+                     const next = new Set(previous);
+                     if (e.target.checked) next.add(record.id); else next.delete(record.id);
+                     return next;
+                   });
+                 }} /></td>
                <td>{record.rowNumber}</td>
                {headers.map((h,i) => <td key={i}><EditableCell value={record.cells[i]} onCommit={(value) => onEditCell?.(record.id,i,value)} testId={'print-cell-'+record.id+'-'+i} /></td>)}
              </tr>)}</tbody></table></div>
@@ -317,8 +353,8 @@ export default function PrintDialog({ template, connection, rows, selection, pre
             </figure>;
           })}
         </div>
-        {table && plan.entries.length > 6 && <SelectField label="Edit any row" value={editRowId || ''} onChange={startEditRow}
-          options={[{ value: '', label: 'Choose an Excel row…' }, ...plan.entries.map(({ record }) => ({ value: record.id, label: 'Row '+record.rowNumber }))]}
+        {table && rows.length > 6 && <SelectField label="Edit any row" value={editRowId || ''} onChange={startEditRow}
+          options={[{ value: '', label: 'Choose an Excel row…' }, ...rows.map((record) => ({ value: record.id, label: 'Row '+record.rowNumber }))]}
           testId="edit-row-picker" />}
         {editingRecord && <div className="print-row-editor" data-testid="print-row-editor">
           <div className="button-row">
@@ -340,7 +376,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
             </label>)}
           </div> : <div className="print-edit-fields">
             {editableObjects.map((object) => {
-              const sample = buildLabel(template, { headers, record: { ...editingRecord, cells: draftCells, labelOverrides: {} }, prompts: promptValues })
+              const sample = buildLabel(printTemplate, { headers, record: { ...editingRecord, cells: draftCells, labelOverrides: {} }, prompts: promptValues, allowMissing })
                 .items.find((item) => item.object.id === object.id)?.text || '';
               const overridden = Object.prototype.hasOwnProperty.call(draftOverrides, object.id);
               return <label className="field" key={object.id}>
