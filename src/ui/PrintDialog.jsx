@@ -3,7 +3,7 @@ import { Printer, FileDown, RefreshCw, Ruler, AlertTriangle, CheckCircle2, XCirc
 import { Modal, Button, SelectField, NumberField, Check, TextField, useDialog } from './controls.jsx';
 import { planJob, serialStateAfter, serialStartsFor, CONFIRM_LABELS_ABOVE } from '../engine/jobs.js';
 import { buildLabel, printDocumentHtml, testPatternLabelHtml } from '../engine/render.js';
-import { templateFieldNames } from '../engine/binding.js';
+import { templateFieldNames, resolveColumn } from '../engine/binding.js';
 import { validateJob, buildChunks, renderPreparedLabel, paperSize } from '../render/pipeline.js';
 import { desktop, isDesktop } from '../platform/api.js';
 import { printerConnectionMessage } from '../platform/printer-connection.js';
@@ -26,7 +26,11 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   const usesData = templateFieldNames(template).length > 0;
   const [printerName, setPrinterName] = useState(template.page.printerName || defaultPrinter || printers.find((p) => p.isDefault)?.name || '');
   const [showDialog, setShowDialog] = useState(!isDesktop);
-  const [scope, setScope] = useState(selection.size ? 'selected' : 'all');
+  const [scope, setScope] = useState('selected');
+  const [selectedPrintIds, setSelectedPrintIds] = useState(() => new Set(rows.map((record) => record.id)));
+  const [selectedObjectIds, setSelectedObjectIds] = useState(() => new Set(template.objects
+    .filter((object) => !object.hidden && object.printable !== false).map((object) => object.id)));
+  const [allowMissing, setAllowMissing] = useState(true);
   const [range, setRange] = useState({ from: rows[0]?.rowNumber || 1, to: rows[rows.length - 1]?.rowNumber || 1 });
   const [useQuantity, setUseQuantity] = useState(template.data.quantityMode === 'field' && Boolean(template.data.quantityField));
   const [copies, setCopies] = useState(template.page.copies || 1);
@@ -77,26 +81,33 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   }
 
   const records = useMemo(() => {
-    if (!usesData && !table) return [{ id: '1', rowNumber: 1, cells: [], raw: [] }];
-    if (scope === 'selected') return rows.filter((r) => selection.has(r.id));
+    if (!table) return [{ id: '1', rowNumber: 1, cells: [], raw: [] }];
+    if (scope === 'selected') return rows.filter((r) => selectedPrintIds.has(r.id));
     if (scope === 'current') return rows.filter((r) => r.id === previewId).slice(0, 1);
     if (scope === 'range') return rows.filter((r) => r.rowNumber >= range.from && r.rowNumber <= range.to);
     return rows;
-  }, [usesData, table, scope, rows, selection, previewId, range]);
+  }, [table, scope, rows, selectedPrintIds, previewId, range]);
 
-  const printTemplate = useMemo(() => ({ ...template, page: { ...template.page, offsetX: Number((template.page.offsetX + fineShiftX).toFixed(3)) } }), [template, fineShiftX]);
+  const printTemplate = useMemo(() => ({
+    ...template,
+    page: { ...template.page, offsetX: Number((template.page.offsetX + fineShiftX).toFixed(3)) },
+    objects: template.objects.filter((object) => selectedObjectIds.has(object.id) && !object.hidden)
+  }), [template, fineShiftX, selectedObjectIds]);
+  const missingQuantity = Boolean(useQuantity && template.data.quantityField &&
+    resolveColumn(headers, template.data.quantityField) < 0);
   const plan = useMemo(() => planJob({
-    template, headers, records, copies, ignoreQuantity: !useQuantity,
-    quantityField: useQuantity ? template.data.quantityField : ''
-  }), [template, headers, records, copies, useQuantity]);
+    template: printTemplate, headers, records, copies, allowMissing,
+    ignoreQuantity: !useQuantity || missingQuantity,
+    quantityField: useQuantity && !missingQuantity ? template.data.quantityField : ''
+  }), [printTemplate, headers, records, copies, useQuantity, missingQuantity, template.data.quantityField, allowMissing]);
 
-  const editingRecord = plan.entries.find((entry) => entry.record.id === editRowId)?.record;
-  const maxGridPage = Math.max(0, Math.ceil(plan.entries.length / 15) - 1);
+  const editingRecord = rows.find((record) => record.id === editRowId);
+  const maxGridPage = Math.max(0, Math.ceil(rows.length / 15) - 1);
   const currentGridPage = Math.min(gridPage, maxGridPage);
-  const visiblePrintRecords = plan.entries.slice(currentGridPage * 15, (currentGridPage + 1) * 15);
-  const editableObjects = template.objects.filter((object) => object.type === 'text' && !object.hidden);
+  const visiblePrintRecords = rows.slice(currentGridPage * 15, (currentGridPage + 1) * 15);
+  const editableObjects = printTemplate.objects.filter((object) => object.type === 'text');
   function startEditRow(id) {
-    const record = plan.entries.find((entry) => entry.record.id === id)?.record;
+    const record = rows.find((entry) => entry.id === id);
     if (!record) return;
     setEditRowId(record.id); setDraftCells([...record.cells]); setDraftOverrides({ ...(record.labelOverrides || {}) }); setEditTab('cells');
   }
@@ -106,7 +117,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     setEditRowId(null);
   }
   const promptProblems = template.prompts.filter((p) => p.required && !String(promptValues[p.name] ?? '').trim()).map((p) => '"' + (p.label || p.name) + '" is required.');
-  const blocking = [...(usesData && !table ? ['Connect an Excel/CSV file: this label uses columns (' + templateFieldNames(template).slice(0, 4).join(', ') + ').'] : []), ...plan.blocking, ...promptProblems];
+  const blocking = [...plan.blocking, ...promptProblems];
 
   // validate (expressions, barcodes, clipped text) and build previews
   useEffect(() => {
@@ -116,17 +127,17 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     const timer = setTimeout(async () => {
       const controller = new AbortController();
       abort.current = controller;
-      const c = await validateJob({ template, plan, headers, prompts: promptValues, limit: 3000, signal: controller.signal });
+      const c = await validateJob({ template: printTemplate, plan, headers, prompts: promptValues, allowMissing, limit: 3000, signal: controller.signal });
       if (cancelled) return;
       setCheck(c);
       const shots = [];
-      const serialStart = serialStartsFor(template);
+      const serialStart = serialStartsFor(printTemplate);
       let base = 0;
       outer: for (const entry of plan.entries) {
         for (let copy = 1; copy <= Math.min(entry.copies, 2); copy++) {
           const labelIndex = base + copy - 1;
-          const built = buildLabel(template, { headers, record: entry.record, prompts: promptValues, recordIndex: entry.recordIndex, recordNumber: entry.recordIndex + 1, labelIndex, labelNumber: labelIndex + 1, copyNumber: copy, copies: entry.copies, serialStart });
-          shots.push({ key: entry.record.id + '-' + copy, row: entry.record.rowNumber, copy, html: (await renderPreparedLabel(template, built)).html });
+          const built = buildLabel(printTemplate, { headers, record: entry.record, prompts: promptValues, allowMissing, recordIndex: entry.recordIndex, recordNumber: entry.recordIndex + 1, labelIndex, labelNumber: labelIndex + 1, copyNumber: copy, copies: entry.copies, serialStart });
+          shots.push({ key: entry.record.id + '-' + copy, row: entry.record.rowNumber, copy, html: (await renderPreparedLabel(printTemplate, built)).html });
           if (shots.length >= 6) break outer;
         }
         base += entry.copies;
@@ -134,7 +145,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
       if (!cancelled) setPreviews(shots);
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); abort.current?.abort(); };
-  }, [template, plan, headers, promptValues, blocking.length]);
+  }, [printTemplate, plan, headers, promptValues, allowMissing, blocking.length]);
 
   const issues = check ? [...check.errors, ...check.barcodeErrors] : [];
   const canPrint = !blocking.length && plan.total > 0 && check && !issues.length && !progress;
@@ -158,7 +169,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
     let pdfParts = [];
     try {
       const status = await buildChunks({
-        template: printTemplate, plan, headers, prompts: promptValues, signal: controller.signal, title: template.name,
+        template: printTemplate, plan, headers, prompts: promptValues, allowMissing, signal: controller.signal, title: template.name,
         onProgress: (done) => setProgress((p) => ({ ...p, done })),
         onChunk: async (chunk) => {
           if (mode === 'pdf') { pdfParts.push(chunk.html); return true; }
@@ -192,7 +203,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
         const warnings = outcomes.map((o) => o.warning).filter(Boolean);
         const simulated = outcomes.some((o) => o.simulatedFile);
         setResult({ kind: warnings.length ? 'warn' : 'ok', text: (simulated ? 'Simulated printer wrote ' : isDesktop ? 'Sent ' : 'Opened print for ') + plan.total.toLocaleString() + ' label(s)' + (isDesktop && !simulated ? ' to the Windows spooler for "' + (printer?.displayName || printerName || 'the selected printer') + '". Check the printed labels — Windows cannot confirm physical printing.' : '.'), warnings });
-        const state = serialStateAfter(template, plan);
+        const state = serialStateAfter(printTemplate, plan);
         if (JSON.stringify(state) !== JSON.stringify(template.serialState || {})) onSerialState?.(state);
         onPrinted?.({ jobId, total: plan.total });
       }
