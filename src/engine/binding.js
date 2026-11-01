@@ -107,6 +107,8 @@ export function makeContext(options = {}) {
     now: options.now || (() => new Date()),
     serialStart: options.serialStart || {},
     missing,
+    allowMissing: Boolean(options.allowMissing),
+    isMissingField(name) { return resolveColumn(headers, name) < 0; },
     /** Display text of a column (keeps leading zeros as shown in Excel). */
     text(name) {
       const index = resolveColumn(headers, name);
@@ -259,7 +261,10 @@ export function resolveText(object, ctx) {
   switch (content.mode) {
     case 'field': value = content.field ? rawForFormat(ctx, content.field, format) : ''; break;
     case 'template': value = renderTextTemplate(content.template, ctx); break;
-    case 'expression': value = content.expression ? evaluateExpression(content.expression, ctx) : ''; break;
+    case 'expression': value = content.expression
+      ? (ctx.allowMissing && referencedFields(content.expression).some((name) => ctx.isMissingField(name))
+        ? '' : evaluateExpression(content.expression, ctx))
+      : ''; break;
     case 'prompt': value = ctx.prompt(content.prompt); break;
     case 'date': {
       const now = ctx.now();
@@ -296,6 +301,7 @@ export function evaluateRule(rule, ctx) {
   if (rule.kind === 'expression' && !String(rule.expression || '').trim()) return true;
   if (rule.kind === 'field' && !rule.field) return true;
   if (rule.kind === 'expression') {
+    if (ctx.allowMissing && referencedFields(rule.expression).some((name) => ctx.isMissingField(name))) return true;
     const value = evaluateExpression(rule.expression, ctx);
     if (typeof value === 'boolean') return value;
     const t = expressionToText(value).trim().toUpperCase();
