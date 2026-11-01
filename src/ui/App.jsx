@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FilePlus2, FolderOpen, Save, Stamp, Type, Columns3, Undo2, Redo2, Scissors, Copy, ClipboardPaste, Trash2, Database, RefreshCw, Printer, FileDown,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  BringToFront, SendToBack, Group, Ungroup, ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet, Tag, Cable
+  BringToFront, SendToBack, Group, Ungroup, ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet, Tag, Cable, FileSpreadsheet
 } from 'lucide-react';
 import MenuBar from './MenuBar.jsx';
 import Canvas from './Canvas.jsx';
@@ -25,6 +25,7 @@ import { applyFilters, sortRecords, searchRecords } from '../engine/jobs.js';
 import { templateFieldNames, missingFields } from '../engine/binding.js';
 import { applyRenames, detachDeletedField, objectsUsingField } from '../engine/remap.js';
 import { readSpreadsheet, withHeaderRow } from '../data/importers.js';
+import { createDesignWorkbook } from '../data/export-template.js';
 import { removeWorkingRows, removeWorkingColumn, editWorkingRow, editWorkingCell } from '../data/editing.js';
 import { handleAutomationRender } from '../render/automation.js';
 import { desktop, isDesktop } from '../platform/api.js';
@@ -321,7 +322,7 @@ export default function App() {
         await refreshTemplates();
         await desktop.settings.update({ lastTemplateId: saved.id }).catch(() => {});
         desktop.autosave.clear().catch(() => {});
-        notify('Saved "' + saved.name + '".');
+        notify('Saved design "' + saved.name + '" locally on this computer.');
         return true;
       } catch (e) { notify('Save failed: ' + e.message, 'error'); return false; }
     }
@@ -330,7 +331,7 @@ export default function App() {
       doc.markSaved(saved);
       await refreshTemplates();
       desktop.autosave.clear().catch(() => {});
-      notify('Saved "' + saved.name + '" (revision ' + saved.revision + ').');
+      notify('Saved design "' + saved.name + '" locally (revision ' + saved.revision + ').');
       return true;
     } catch (e) {
       if (e.code === 'conflict') {
@@ -346,6 +347,19 @@ export default function App() {
       notify('Save failed: ' + e.message, 'error');
       return false;
     }
+  }
+
+  async function exportDesignExcel() {
+    if (!doc.storedId || doc.dirty) {
+      const saved = await save();
+      if (!saved) return;
+    }
+    try {
+      const { bytes, columns } = await createDesignWorkbook(template);
+      const result = await desktop.data.exportDesignExcel(template.name, bytes);
+      if (result?.canceled) return;
+      notify('Excel starter exported with ' + columns.length + ' column(s): ' + columns.join(', ') + '. Fill the Data tab and connect it to this design.');
+    } catch (error) { notify('Excel export failed: ' + error.message, 'error'); }
   }
 
   async function saveStamp() {
@@ -530,9 +544,10 @@ export default function App() {
     { id: 'file', label: 'File', items: [
       { label: 'New label…', shortcut: 'Ctrl+N', onClick: () => setDialog('new') },
       { label: 'Open template…', shortcut: 'Ctrl+O', onClick: () => setDialog('manager') },
-      { label: 'Save', shortcut: 'Ctrl+S', onClick: () => save() },
+      { label: 'Save design locally', shortcut: 'Ctrl+S', onClick: () => save() },
       { label: 'Save as…', shortcut: 'Ctrl+Shift+S', onClick: () => save({ saveAs: true }) },
       { label: 'Save as stamp…', onClick: saveStamp },
+      { label: 'Export Excel data sheet for this design…', onClick: exportDesignExcel },
       { label: 'Open saved stamps…', onClick: () => setDialog('stamps') },
       '-',
       { label: 'Import templates…', onClick: async () => { const r = await desktop.templates.importDialog().catch((e) => notify(e.message, 'error')); if (r && !r.canceled) { await refreshTemplates(); notify('Imported ' + r.imported.length + ' template(s).' + (r.failed.length ? ' ' + r.failed.length + ' failed.' : ''), r.failed.length ? 'warn' : 'ok'); } } },
@@ -600,6 +615,7 @@ export default function App() {
       { label: 'Connect / change data source…', shortcut: 'Ctrl+Shift+D', onClick: openWizard },
       { label: 'Reload data from disk', onClick: reloadData, disabled: !connection?.token },
       { label: 'Data notes & warnings…', onClick: () => setDialog('warnings'), disabled: !table?.warnings.length },
+      { label: 'Export Excel data sheet for this design…', onClick: exportDesignExcel },
       '-',
       { label: 'Select all rows', onClick: () => changeSelection('all'), disabled: !table },
       { label: 'Select no rows', onClick: () => changeSelection('none'), disabled: !table },
@@ -639,7 +655,7 @@ export default function App() {
       <div className="toolbar-tools">
       <IconButton icon={FilePlus2} label="New label" shortcut="Ctrl+N" onClick={() => setDialog('new')} testId="tb-new" />
       <IconButton icon={FolderOpen} label="Open template" shortcut="Ctrl+O" onClick={() => setDialog('manager')} testId="tb-open" />
-      <IconButton icon={Save} label="Save" shortcut="Ctrl+S" onClick={() => save()} testId="tb-save" />
+      <IconButton icon={Save} label="Save design locally" shortcut="Ctrl+S" onClick={() => save()} testId="tb-save" />
       <span className="sep" />
       <IconButton icon={Undo2} label="Undo" shortcut="Ctrl+Z" onClick={doc.undo} disabled={!doc.canUndo} testId="tb-undo" />
       <IconButton icon={Redo2} label="Redo" shortcut="Ctrl+Y" onClick={doc.redo} disabled={!doc.canRedo} testId="tb-redo" />
@@ -673,7 +689,9 @@ export default function App() {
       <div className="toolbar-actions">
         <button type="button" className="btn" data-testid="tb-add-text" onClick={() => addTool('text', undefined, true)} title="Type text on your label"><Type size={15} /> Add text</button>
         <button type="button" className="btn" data-testid="tb-add-excel" onClick={() => addTool('field', undefined, true)} title="Choose a live Excel value"><Columns3 size={15} /> Excel value</button>
-        <button type="button" className="btn" data-testid="tb-save-stamp" onClick={saveStamp} title="Save words, Excel columns and print positions"><Stamp size={15} /> Save stamp</button>
+        <button type="button" className="btn" data-testid="tb-save-design" onClick={() => save()} title="Save this label design locally for later editing"><Save size={15} /> Save design</button>
+         <button type="button" className="btn" data-testid="tb-export-excel" onClick={exportDesignExcel} title="Create a fill-in Excel workbook with the data columns this design needs"><FileSpreadsheet size={15} /> Export Excel sheet</button>
+         <button type="button" className="btn" data-testid="tb-save-stamp" onClick={saveStamp} title="Save words, Excel columns and print positions"><Stamp size={15} /> Save stamp</button>
         <button type="button" className="btn" data-testid="tb-open-stamp" onClick={() => setDialog('stamps')} title="Open a saved stamp"><FolderOpen size={15} /> Stamps</button>
       </div>
       <div className="toolbar-printer-actions">
@@ -726,7 +744,7 @@ export default function App() {
       <span>{table ? processed.length.toLocaleString() + ' rows · ' + rowSelection.size.toLocaleString() + ' selected' : 'No data'}</span>
       <span className="spacer" />
       {defaultPrinter && <span className={defaultPrinter.blocking ? 'bad' : defaultPrinter.problems?.length ? 'warn' : ''} title={defaultPrinter.problems?.join(', ')}>Printer: {defaultPrinter.displayName}{defaultPrinter.problems?.length ? ' — ' + defaultPrinter.problems.join(', ') : ''}</span>}
-      <span>{doc.storedId ? (doc.dirty ? 'Unsaved changes' : 'Saved · rev ' + template.revision) : 'Not saved'}</span>
+      <span>{doc.storedId ? (doc.dirty ? 'Unsaved changes · Save design' : 'Saved locally · rev ' + template.revision) : 'Design not saved · Save design'}</span>
       <span>{info ? 'v' + info.version : ''}</span>
     </footer>
 
