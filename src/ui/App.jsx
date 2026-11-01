@@ -23,7 +23,7 @@ import { createObject, newId, sanitizeTemplate, SAFE_FONTS } from '../engine/sch
 import { templateFromStarter } from '../engine/starters.js';
 import { applyFilters, sortRecords, searchRecords } from '../engine/jobs.js';
 import { templateFieldNames, missingFields } from '../engine/binding.js';
-import { applyRenames, detachDeletedField } from '../engine/remap.js';
+import { applyRenames, detachDeletedField, objectsUsingField } from '../engine/remap.js';
 import { readSpreadsheet, withHeaderRow } from '../data/importers.js';
 import { removeWorkingRows, removeWorkingColumn, editWorkingRow, editWorkingCell } from '../data/editing.js';
 import { handleAutomationRender } from '../render/automation.js';
@@ -240,7 +240,15 @@ export default function App() {
     const name = table.headers[index];
     const ok = await ask({ title: 'Remove Excel column', message: 'Exclude "' + name + '" from this imported copy? References in this label template will be cleared automatically (including quantity, filters, and formulas). The original Excel file stays unchanged.', confirmLabel: 'Remove column', danger: true });
     if (!ok) return;
-    editTable((t) => removeWorkingColumn(t, index));
+    const affected = new Set(objectsUsingField(template, name));
+    editTable((t) => {
+      const edited = removeWorkingColumn(t, index);
+      if (!affected.size) return edited;
+      return { ...edited, records: edited.records.map((record) => ({
+        ...record,
+        labelOverrides: Object.fromEntries(Object.entries(record.labelOverrides || {}).filter(([id]) => !affected.has(id)))
+      })) };
+    });
     doc.update((t) => detachDeletedField(t, name));
     notify('Removed column "' + name + '" and cleared its label bindings. Excel file unchanged.', 'warn');
   }
