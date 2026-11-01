@@ -91,7 +91,7 @@ export default function PrintDialog({ template, connection, rows, selection, pre
   const printTemplate = useMemo(() => ({
     ...template,
     page: { ...template.page, offsetX: Number((template.page.offsetX + fineShiftX).toFixed(3)) },
-    objects: template.objects.filter((object) => selectedObjectIds.has(object.id) && !object.hidden)
+    objects: template.objects.filter((object) => selectedObjectIds.has(object.id) && !object.hidden).map((object) => ({ ...object, printable: true }))
   }), [template, fineShiftX, selectedObjectIds]);
   const missingQuantity = Boolean(useQuantity && template.data.quantityField &&
     resolveColumn(headers, template.data.quantityField) < 0);
